@@ -1,8 +1,9 @@
 {
   "name": "hm2mqtt",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
+  "bin": {"hm2mqtt": "./index.js"},
   "preferGlobal": true,
   "scripts": {
     "test": "xo --space 4"
