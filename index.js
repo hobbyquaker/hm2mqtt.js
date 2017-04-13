@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const path = require('path');
 const pjson = require('persist-json')('hm2mqtt');
 const async = require('async');
 const log = require('yalm');
@@ -81,7 +82,8 @@ mqtt.on('message', (topic, payload) => {
         const [, , iface, command, callid] = parts;
         rpc(iface, command, callid, payload);
     } else if (parts.length === 3 && parts[1] === 'set') {
-        // Example <name>/set/<program/variable name/id>
+        // Example <name>/set/<program/variable name>
+
 
     }
 });
@@ -194,6 +196,45 @@ function rpcSet(name, datapoint, payload) {
     });
 }
 
+function rega(script, callback) {
+    const url = 'http://' + config.ccuAddress + ':8181/rega.exe';
+    log.debug('sending script to', url);
+    request({
+        method: 'POST',
+        url,
+        body: script,
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': script.length
+        }
+    }, (err, res, body) => {
+        if (!err && body) {
+            const end = body.indexOf('<xml>');
+            const data = body.substr(0, end);
+            callback(null, data);
+        } else {
+            callback(err);
+        }
+    });
+}
+
+function regaJson(file, callback) {
+    const filepath = path.join(__dirname, 'regascripts', file);
+    const script = fs.readFileSync(filepath).toString();
+    rega(script, (err, res) => {
+        if (!err) {
+            try {
+                let data = JSON.parse(unescape(res));
+                callback(null, data);
+            } catch (err) {
+                callback(err);
+            }
+        } else {
+            log.error(err);
+        }
+    });
+}
+
 if (config.jsonNameTable) {
     log.info('loading name table', config.jsonNameTable);
     names = require(config.jsonNameTable);
@@ -201,32 +242,93 @@ if (config.jsonNameTable) {
 } else if (!config.disableRega) {
     log.info('loading', 'names_' + fileName());
     names = pjson.load('names_' + fileName()) || {};
-    const url = 'http://' + config.ccuAddress + ':8181/rega.exe';
-    const body = fs.readFileSync('./devices.fn');
-    log.info('requesting names from', url);
-    request({
-        method: 'POST',
-        url,
-        body,
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': body.length
-        }
-    }, (err, res, body) => {
-        if (!err && body) {
-            const end = body.indexOf('<xml>');
-            const data = body.substr(0, end);
-            try {
-                names = JSON.parse(unescape(data));
-                reverseNames();
-                log.info('saving', 'names_' + fileName());
-                pjson.save('names_' + fileName(), names);
-            } catch (err) {
-                log.error(err);
-            }
+    regaJson('devices.fn', (err, res) => {
+        if (!err) {
+            names = res;
+            reverseNames();
+            log.info('saving', 'names_' + fileName());
+            pjson.save('names_' + fileName(), names);
+            getVariables();
         } else {
             log.error(err);
         }
+    });
+}
+
+let variables = {};
+function variableType(type, subtype) {
+    switch (type) {
+        case 2:
+            return 'BOOL';
+            break;
+        case 4:
+            return 'FLOAT';
+            break;
+        case 16:
+            if (subtype === 29) {
+                return 'ENUM';
+            } else {
+                return 'INTEGER';
+            }
+            break;
+        case 20:
+            return 'STRING';
+            break;
+        default:
+    }
+}
+
+function getVariables() {
+    regaJson('variables.fn', (err, res) => {
+        if (!err) {
+            console.log(res);
+            Object.keys(res).forEach(id => {
+                let type =  variableType(res[id].ValueType, res[id].ValueSubType);
+                let change = false;
+                const varName = res[id].Name;
+                if (!variables[varName] || (res[id].Value !== variables[varName].val)) {
+                    change = true;
+                }
+                if (!variables[varName]) {
+                    variables[varName] = {};
+                }
+                variables[varName].val = res[id].Value;
+                variables[varName].type = variableType(res[id].ValueType, res[id].ValueSubType);
+                if (variables[varName].type === 'ENUM' || variables[varName].type === 'BOOL') {
+                    variables[varName].enum = res[id].ValueList.split(';');
+                }
+
+                if (change) {
+                    variables[varName].lc =  variables[varName].ts;
+                    const topic = config.name + '/status/' + res[id].Name;
+                    const ts = (new Date()).getTime();
+                    let payload = {
+                        val: res[id].Value,
+                        ts,
+                        lc: (new Date(res[id].Timestamp)).getTime() || undefined,
+                        hm: {
+                            unit: res[id].ValueUnit || undefined,
+                            min: res[id].ValueMin || undefined,
+                            max: res[id].ValueMax || undefined
+                        }
+                    };
+                    if (variables[varName].type === 'ENUM') {
+                        payload.hm.enum = variables[varName].enum[payload.val];
+                    } else if (variables[varName].type === 'BOOL' && variables[varName].enum.length > 0) {
+                        payload.hm.enum = variables[varName].enum[payload.val ? 1 : 0];
+                    }
+                    payload = JSON.stringify(payload);
+                    log.debug('mqtt >', topic, payload);
+                    mqtt.publish(topic, payload, {retain: true});
+                }
+            });
+            log.info('saving', 'variables_' + fileName());
+            pjson.save('variables_' + fileName(), variables);
+        } else {
+            log.error(err);
+        }
+        console.log(variables);
+        process.exit(0)
     });
 }
 
