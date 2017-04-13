@@ -124,6 +124,7 @@ function rpcSet(name, datapoint, payload) {
             } else if (val > ps.MAX) {
                 val = ps.MAX;
             }
+            val = {explicitDouble: val};
             break;
         case 'ENUM':
             if (typeof val === 'string') {
@@ -192,20 +193,24 @@ if (config.jsonNameTable) {
 
 log.debug('discover interfaces');
 discover(config.ccuAddress, {
-    // Later... cuxd: {port: 8701, protocol: 'binrpc'},
+    // Todo... cuxd: {port: 8701, protocol: 'binrpc'},
     rfd: {port: 2001, protocol: 'binrpc'},
     hs485d: {port: 2000, protocol: 'binrpc'},
     hmip: {port: 2010, protocol: 'xmlrpc'}
 }, interfaces => {
     Object.keys(interfaces).forEach(iface => {
         createIface(iface, interfaces[iface].protocol, interfaces[iface].port);
-        /* Todo
-        if (config.pingInterval) {
+        if (iface === 'hmip' && config.hmipReconnectInterval) {
+            setInterval(() => {
+                checkInit(iface, interfaces[iface].protocol);
+            }, config.hmipReconnectInterval * 1000);
+        } else if (iface === 'cuxd') {
+            // TODO
+        } else if (config.pingInterval) {
             setInterval(() => {
                 checkInit(iface, interfaces[iface].protocol);
             }, config.pingInterval * 1000);
         }
-        */
     });
 });
 
@@ -213,16 +218,20 @@ function fileName(name) {
     return config.ccuAddress + (name ? '_' + name : '');
 }
 
-/* Todo
-function checkInit(iface) {
+function checkInit(iface, protocol) {
     const now = (new Date()).getTime();
-    const elapsed = Math.floor((now - (lastEvent[iface] || 0)) / 1000);
-    console.log(iface, now, lastEvent[iface], elapsed);
-    log.info(iface, 'elapsed since lastevent:', elapsed);
-    if (elapsed >= (config.pingInterval * 2)) {
-        // Re-init here
+    const elapsed = Math.ceil((now - (lastEvent[iface] || 0)) / 1000);
+    log.debug(iface, 'elapsed since lastevent:', elapsed + 's');
+    if (iface === 'hmip' && config.hmipReconnectInterval) {
+        if (elapsed >= config.hmipReconnectInterval) {
+            initIface(iface, protocol);
+        }
+    } else if (iface === 'cuxd') {
+        // TODO cuxd reconnect? ping possible?
+    } else if (elapsed >= (config.pingInterval * 2)) {
+        initIface(iface, protocol);
     } else if (elapsed >= config.pingInterval) {
-        log.info('rpc', iface, '> ping');
+        log.debug('rpc', iface, '> ping');
         rpcClient[iface].methodCall('ping', ['hm2mqtt'], err => {
             if (err) {
                 log.error(err);
@@ -230,7 +239,6 @@ function checkInit(iface) {
         });
     }
 }
-*/
 
 function createIface(name, protocol, port) {
     log.debug('loading', 'devices_' + fileName(name));
@@ -393,6 +401,7 @@ const rpcMethods = {
         lastEvent[ifaceName(params[0])] = ts;
 
         if (params[1] === 'CENTRAL' && params[2] === 'PONG') {
+            callback(null, '');
             return;
         }
 
@@ -465,9 +474,9 @@ const rpcMethods = {
         log.debug('rpc < deleteDevices', params[1].length);
         const name = ifaceName(params[0]);
         params[1].forEach(dev => {
-            delete devices[name][dev.address];
+            delete devices[name][dev];
         });
-        log.debug('saving', 'devices_' + fileName(name));
+        log.debug('saving', 'devices_' + fileName(name), '(' + Object.keys(devices[name]).length + ')');
         pjson.save('devices_' + fileName(name), devices[name]);
         callback(null, '');
         getParamsetTimeout[params[0]] = setTimeout(() => {
@@ -486,7 +495,7 @@ const rpcMethods = {
         params[1].forEach(dev => {
             devs[dev.ADDRESS] = dev;
         });
-        log.debug('saving', 'devices_' + fileName(name));
+        log.debug('saving', 'devices_' + fileName(name), '(' + Object.keys(devices[name]).length + ')');
         devices[name] = devs;
         pjson.save('devices_' + fileName(name), devs);
         callback(null, '');

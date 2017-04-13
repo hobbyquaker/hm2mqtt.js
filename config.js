@@ -13,12 +13,13 @@ module.exports = require('yargs')
         b: 'binrpc-listen-port',
         d: 'disable-rega',
         h: 'help',
-        // Todo i: 'ping-interval',
+        i: 'ping-interval',
         j: 'json-name-table',
         l: 'listen-port',
         m: 'mqtt-url',
         n: 'name',
         p: 'mqtt-password',
+        q: 'hmip-reconnect-interval',
         r: 'listen-address',
         u: 'mqtt-username',
         v: 'verbosity'
@@ -31,7 +32,8 @@ module.exports = require('yargs')
         'listen-address': require('./firstip.js'),
         'listen-port': 2126,
         'binrpc-listen-port': 2127,
-        'ping-interval': 30
+        'ping-interval': 30,
+        'hmip-reconnect-interval': 600
     })
     .demandOption([
         'ccu-address'
