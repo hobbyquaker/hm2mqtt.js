@@ -266,6 +266,9 @@ function stop() {
     async.parallel(cmdQueue, () => {
         process.exit(0);
     });
+    setTimeout(() => {
+        process.exit(1);
+    }, 2500);
 }
 
 process.on('SIGINT', stop);
