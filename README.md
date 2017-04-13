@@ -47,9 +47,9 @@ Options:
 
 ### Topics
 
-* `<name>/status/<channelName>/<datapoint>`
-* `<name>/set/<channelAddress_or_channelName>/<datapoint>`
-* `<name>/rpc/<iface>/<command>/<callId>` responds to `<name>/response/<callId>`
+* Events are published on `<name>/status/<channelName>/<datapoint>` (JSON payload)
+* Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (plain or JSON payload)
+* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` (payload is a JSON encoded Array)
 
 
 ## License
