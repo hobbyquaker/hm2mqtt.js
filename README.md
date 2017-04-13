@@ -44,6 +44,14 @@ Options:
   -b, --binrpc-listen-port                                       [default: 2127]
 ```
 
+
+### Topics
+
+* `<name>/status/<channelName>/<datapoint>`
+* `<name>/set/<channelAddress_or_channelName>/<datapoint>`
+* `<name>/rpc/<iface>/<command>/<callId>` responds to `<name>/response/<callId>`
+
+
 ## License
 
 MIT (c) 2017 [Sebastian Raff](https://github.com/hobbyquaker)

@@ -53,6 +53,9 @@ mqtt.on('connect', () => {
 
     log.info('mqtt subscribe', config.name + '/set/#');
     mqtt.subscribe(config.name + '/set/#');
+
+    log.info('mqtt subscribe', config.name + '/rpc/#');
+    mqtt.subscribe(config.name + '/rpc/#');
 });
 
 mqtt.on('close', () => {
@@ -71,9 +74,45 @@ mqtt.on('message', (topic, payload) => {
     log.debug('mqtt <', topic, payload);
     const parts = topic.split('/');
     if (parts.length === 4 && parts[1] === 'set') {
+        // Topic <name>/set/<channel>/<datapoint>
         rpcSet(parts[2], parts[3], String(payload));
+    } else if (parts.length === 5 && parts[1] === 'rpc') {
+        // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
+        let [, , iface, command, callid] = parts;
+        rpc(iface, command, callid, payload);
+    } else if (parts.length === 3 && parts[1] === 'set') {
+        // Example <name>/set/<program/variable name/id>
+
     }
 });
+
+function rpc(iface, command, callid, payload) {
+    if (rpcClient[iface]) {
+        let params;
+        if (payload.indexOf('[') === 0) {
+            try {
+                params = JSON.parse(payload);
+            } catch (err) {
+                log.error(err);
+            }
+        } else if (params) {
+            params = [params];
+        } else {
+            params = [];
+        }
+        log.debug('rpc', iface, '>', command, params);
+        rpcClient[iface].methodCall(command, params, (err, res) => {
+            if (err) {
+                log.error(err);
+            } else {
+                let topic = config.name + '/response/' + callid;
+                let payload = JSON.stringify(res);
+                log.debug('mqtt >', topic, payload);
+                mqtt.publish(topic, payload);
+            }
+        });
+    }
+}
 
 function rpcSet(name, datapoint, payload) {
     const address = addresses[name] || name;
@@ -112,7 +151,7 @@ function rpcSet(name, datapoint, payload) {
             // OMG this is so ugly...
             if (val === 'false') {
                 val = false;
-            } else if (!isNaN(val)) {
+            } else if (!isNaN(val)) { // Make sure that the string "0" gets casted to boolean false
                 val = Number(val);
             }
             val = Boolean(val);
