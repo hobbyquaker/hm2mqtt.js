@@ -78,7 +78,7 @@ mqtt.on('message', (topic, payload) => {
         rpcSet(parts[2], parts[3], String(payload));
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
-        let [, , iface, command, callid] = parts;
+        const [, , iface, command, callid] = parts;
         rpc(iface, command, callid, payload);
     } else if (parts.length === 3 && parts[1] === 'set') {
         // Example <name>/set/<program/variable name/id>
@@ -105,8 +105,8 @@ function rpc(iface, command, callid, payload) {
             if (err) {
                 log.error(err);
             } else {
-                let topic = config.name + '/response/' + callid;
-                let payload = JSON.stringify(res);
+                const topic = config.name + '/response/' + callid;
+                const payload = JSON.stringify(res);
                 log.debug('mqtt >', topic, payload);
                 mqtt.publish(topic, payload);
             }
