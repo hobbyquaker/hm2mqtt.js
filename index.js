@@ -76,15 +76,19 @@ mqtt.on('message', (topic, payload) => {
     const parts = topic.split('/');
     if (parts.length === 4 && parts[1] === 'set') {
         // Topic <name>/set/<channel>/<datapoint>
-        rpcSet(parts[2], parts[3], String(payload));
+        rpcSet(parts[2], 'VALUES', parts[3], payload);
+    } else if (parts.length === 5 && parts[1] === 'set') {
+        // Topic <name>/set/<channel>/<paramset>/<datapoint>
+        rpcSet(parts[2], parts[3], parts[4], payload);
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
         const [, , iface, command, callid] = parts;
         rpc(iface, command, callid, payload);
     } else if (parts.length === 3 && parts[1] === 'set') {
-        // Example <name>/set/<program/variable name>
-
-
+        // Topic <name>/set/<variableName>
+        // Topic <name>/set/<programName> Payload start, true, false
+    } else {
+        log.error('mqtt <', topic, payload);
     }
 });
 
@@ -116,7 +120,7 @@ function rpc(iface, command, callid, payload) {
     }
 }
 
-function rpcSet(name, datapoint, payload) {
+function rpcSet(name, paramset, datapoint, payload) {
     const address = addresses[name] || name;
     let iface;
     Object.keys(devices).forEach(i => {
@@ -130,9 +134,9 @@ function rpcSet(name, datapoint, payload) {
     }
     const psName = paramsetName(devices[iface][address]);
     let ps = paramsetDescriptions[psName];
-    ps = ps && ps.VALUES && ps.VALUES[datapoint];
+    ps = ps && ps[paramset] && ps[paramset][datapoint];
     if (!ps) {
-        log.error('unknown paramset', paramsetName(devices[iface][address]) + '.VALUES.' + datapoint);
+        log.error('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramset + '.' + datapoint);
         return;
     }
     let val;
