@@ -47,9 +47,9 @@ Options:
 
 ### Topics
 
-* Events are published on `<name>/status/<channelName>/<datapoint>` (JSON payload)
-* Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (plain or JSON payload)
-* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` (payload is a JSON encoded Array)
+* Events are published on `<name>/status/<channelName>/<datapoint>` (JSON payload, follows [mqtt-smarthome payload format](https://github.com/mqtt-smarthome/mqtt-smarthome/blob/master/Architecture.md))
+* Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (can be plain or JSON payload)
+* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` (JSON encoded Array as payload)
 
 
 ## License
