@@ -85,8 +85,15 @@ mqtt.on('message', (topic, payload) => {
         const [, , iface, command, callid] = parts;
         rpc(iface, command, callid, payload);
     } else if (parts.length === 3 && parts[1] === 'set') {
-        // Topic <name>/set/<variableName>
-        // Topic <name>/set/<programName> Payload start, true, false
+        if (variables[parts[2]]) {
+            // Topic <name>/set/<variableName>
+
+        } else if (programs[parts[2]]) {
+            // Topic <name>/set/<programName>
+
+        } else {
+            log.error('unknown variable/program', parts[2]);
+        }
     } else {
         log.error('mqtt <', topic, payload);
     }
@@ -139,6 +146,9 @@ function rpcSet(name, paramset, datapoint, payload) {
         log.error('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramset + '.' + datapoint);
         return;
     }
+
+    // TODO check if writeable
+
     let val;
     if (payload.indexOf('{') === 0) {
         try {
@@ -259,27 +269,19 @@ if (config.jsonNameTable) {
     });
 }
 
+let programs = {};
+const programNames = {};
 let variables = {};
-function variableType(type, subtype) {
-    switch (type) {
-        case 2:
-            return 'BOOL';
-            break;
-        case 4:
-            return 'FLOAT';
-            break;
-        case 16:
-            if (subtype === 29) {
-                return 'ENUM';
-            } else {
-                return 'INTEGER';
-            }
-            break;
-        case 20:
-            return 'STRING';
-            break;
-        default:
-    }
+let variableNames = {};
+const variableType = {
+    2: 'BOOL',
+    4: 'FLOAT',
+    16: 'INTEGER',
+    20: 'STRING'
+};
+
+function pollVariables() {
+
 }
 
 function getVariables() {
@@ -287,53 +289,28 @@ function getVariables() {
         if (!err) {
             console.log(res);
             Object.keys(res).forEach(id => {
-                let type =  variableType(res[id].ValueType, res[id].ValueSubType);
-                let change = false;
                 const varName = res[id].Name;
-                if (!variables[varName] || (res[id].Value !== variables[varName].val)) {
-                    change = true;
-                }
-                if (!variables[varName]) {
-                    variables[varName] = {};
-                }
-                variables[varName].val = res[id].Value;
-                variables[varName].type = variableType(res[id].ValueType, res[id].ValueSubType);
-                if (variables[varName].type === 'ENUM' || variables[varName].type === 'BOOL') {
-                    variables[varName].enum = res[id].ValueList.split(';');
-                }
-
-                if (change) {
-                    variables[varName].lc =  variables[varName].ts;
-                    const topic = config.name + '/status/' + res[id].Name;
-                    const ts = (new Date()).getTime();
-                    let payload = {
-                        val: res[id].Value,
-                        ts,
-                        lc: (new Date(res[id].Timestamp)).getTime() || undefined,
-                        hm: {
-                            unit: res[id].ValueUnit || undefined,
-                            min: res[id].ValueMin || undefined,
-                            max: res[id].ValueMax || undefined
-                        }
-                    };
-                    if (variables[varName].type === 'ENUM') {
-                        payload.hm.enum = variables[varName].enum[payload.val];
-                    } else if (variables[varName].type === 'BOOL' && variables[varName].enum.length > 0) {
-                        payload.hm.enum = variables[varName].enum[payload.val ? 1 : 0];
-                    }
-                    payload = JSON.stringify(payload);
-                    log.debug('mqtt >', topic, payload);
-                    mqtt.publish(topic, payload, {retain: true});
-                }
+                variables[varName] = {
+                    id: Number(id),
+                    val: res[id].Value,
+                    min: res[id].Min,
+                    max: res[id].Max,
+                    unit: res[id].ValueUnit,
+                    type: variableType[res[id].ValueType],
+                    'enum': res[id].ValueList ? res[id].ValueList.split(';') : []
+                };
+                variableNames[Number(id)] = varName;
             });
             log.info('saving', 'variables_' + fileName());
             pjson.save('variables_' + fileName(), variables);
         } else {
             log.error(err);
         }
-        console.log(variables);
-        process.exit(0)
     });
+}
+
+function getPrograms() {
+
 }
 
 log.debug('discover interfaces');
@@ -396,6 +373,9 @@ function createIface(name, protocol, port) {
     if (protocol === 'binrpc') {
         rpcClient[name].on('connect', () => {
             initIface(name, protocol, port);
+        });
+        rpcClient[name].on('error', (err) => {
+            log.error('rpc', name, err ? err.code || err : '');
         });
     } else {
         initIface(name, protocol, port);
@@ -601,6 +581,39 @@ const rpcMethods = {
         const ret = [];
         if (devices[name]) {
             Object.keys(devices[name]).forEach(address => {
+                /* Todo This does not work: https://github.com/eq-3/occu/issues/45
+                if (name === 'hmip') {
+                    ret.push({
+                        ADDRESS: address,
+                        VERSION: devices[name][address].VERSION,
+                        AES_ACTIVE: devices[name][address].AES_ACTIVE,
+                        CHILDREN: devices[name][address].CHILDREN,
+                        DIRECTION: devices[name][address].DIRECTION,
+                        FIRMWARE: devices[name][address].FIRMWARE,
+                        FLAGS: devices[name][address].FLAGS,
+                        GROUP: devices[name][address].GROUP,
+                        INDEX: devices[name][address].INDEX,
+                        INTERFACE: devices[name][address].INTERFACE,
+                        LINK_SOURCE_ROLES: devices[name][address].LINK_SOURCE_ROLES,
+                        LINK_TARGET_ROLES: devices[name][address].LINK_TARGET_ROLES,
+                        PARAMSETS: devices[name][address].PARAMSETS,
+                        PARENT: devices[name][address].PARENT,
+                        PARENT_TYPE: devices[name][address].PARENT_TYPE,
+                        RF_ADDRESS: devices[name][address].RF_ADDRESS,
+                        ROAMING: devices[name][address].ROAMING,
+                        RX_MODE: devices[name][address].RX_MODE,
+                        TEAM: devices[name][address].TEAM,
+                        TEAM_CHANNELS: devices[name][address].TEAM_CHANNELS,
+                        TEAM_TAG: devices[name][address].TEAM_TAG,
+                        TYPE: devices[name][address].TYPE
+                    });
+                } else {
+                    ret.push({
+                        ADDRESS: address,
+                        VERSION: devices[name][address].VERSION
+                    });
+                }
+                 */
                 ret.push({
                     ADDRESS: address,
                     VERSION: devices[name][address].VERSION
