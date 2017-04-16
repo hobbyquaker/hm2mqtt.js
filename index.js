@@ -68,6 +68,9 @@ mqtt.on('connect', () => {
 
     log.info('mqtt subscribe', config.name + '/rpc/#');
     mqtt.subscribe(config.name + '/rpc/#');
+
+    log.info('mqtt subscribe', config.name + '/command/#');
+    mqtt.subscribe(config.name + '/command/#');
 });
 
 mqtt.on('close', () => {
@@ -104,6 +107,14 @@ mqtt.on('message', (topic, payload) => {
             setProgram(programs[parts[2]], payload);
         } else {
             log.error('unknown variable/program', parts[2]);
+        }
+    } else if (parts[1] === 'command') {
+        switch (parts[2]) {
+            case 'regasync':
+                getRegaDeviceNames();
+                break;
+            default:
+                log.error('mqtt < unknown command', parts[2]);
         }
     } else {
         log.error('mqtt <', topic, payload);
@@ -236,7 +247,10 @@ function rpcSet(name, paramset, datapoint, payload) {
         return;
     }
 
-    // TODO check if writeable
+    if (!(ps.OPERATIONS & 2)) {
+        log.error(iface, address, paramset, datapoint, 'not writeable');
+        return;
+    }
 
     let val;
     if (payload.indexOf('{') === 0) {
@@ -337,13 +351,7 @@ function regaJson(file, callback) {
     });
 }
 
-if (config.jsonNameTable) {
-    log.info('loading name table', config.jsonNameTable);
-    names = require(config.jsonNameTable);
-    reverseNames();
-} else if (!config.disableRega) {
-    log.info('loading', 'names_' + fileName());
-    names = pjson.load('names_' + fileName()) || {};
+function getRegaDeviceNames(cb) {
     regaJson('devices.fn', (err, res) => {
         if (err) {
             log.error(err);
@@ -352,19 +360,31 @@ if (config.jsonNameTable) {
             reverseNames();
             log.info('saving', 'names_' + fileName());
             pjson.save('names_' + fileName(), names);
-            if (config.regaPollInterval || config.regaPollTrigger) {
+            if (typeof cb === 'function') cb();
+        }
+    });
+}
+
+if (config.jsonNameTable) {
+    log.info('loading name table', config.jsonNameTable);
+    names = require(config.jsonNameTable);
+    reverseNames();
+} else if (!config.disableRega) {
+    log.info('loading', 'names_' + fileName());
+    names = pjson.load('names_' + fileName()) || {};
+    getRegaDeviceNames(() => {
+        if (config.regaPollInterval || config.regaPollTrigger) {
+            getPrograms(() => {
+                getVariables();
+            });
+        }
+        if (config.regaPollInterval > 0) {
+            log.debug('rega poll interval', config.regaPollInterval);
+            setInterval(() => {
                 getPrograms(() => {
                     getVariables();
                 });
-            }
-            if (config.regaPollInterval > 0) {
-                log.debug('rega poll interval', config.regaPollInterval);
-                setInterval(() => {
-                    getPrograms(() => {
-                        getVariables();
-                    });
-                }, config.regaPollInterval * 1000);
-            }
+            }, config.regaPollInterval * 1000);
         }
     });
 }
