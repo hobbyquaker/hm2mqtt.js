@@ -149,10 +149,12 @@ function setVar(variable, payload) {
             break;
         default:
     }
-    let script = 'dom.GetObject(' + variable.id + ').State(' + val + ');';
+    const script = 'dom.GetObject(' + variable.id + ').State(' + val + ');';
     log.debug(script);
-    rega(script, (err) => {
-        if (err) log.error(err);
+    rega(script, err => {
+        if (err) {
+            log.error(err);
+        }
     });
 }
 
@@ -179,8 +181,10 @@ function setProgram(program, payload) {
         script = 'dom.GetObject(' + program.id + ').Active(' + val + ');';
     }
     log.debug(script);
-    rega(script, (err) => {
-        if (err) log.error(err);
+    rega(script, err => {
+        if (err) {
+            log.error(err);
+        }
     });
 }
 
@@ -321,15 +325,14 @@ function regaJson(file, callback) {
     const filepath = path.join(__dirname, 'regascripts', file);
     const script = fs.readFileSync(filepath).toString();
     rega(script, (err, res) => {
-        if (!err) {
+        if (err) {
+            log.error(err);
+        } else {
             try {
-                let data = JSON.parse(unescape(res));
-                callback(null, data);
+                callback(null, JSON.parse(unescape(res)));
             } catch (err) {
                 callback(err);
             }
-        } else {
-            log.error(err);
         }
     });
 }
@@ -342,7 +345,9 @@ if (config.jsonNameTable) {
     log.info('loading', 'names_' + fileName());
     names = pjson.load('names_' + fileName()) || {};
     regaJson('devices.fn', (err, res) => {
-        if (!err) {
+        if (err) {
+            log.error(err);
+        } else {
             names = res;
             reverseNames();
             log.info('saving', 'names_' + fileName());
@@ -360,15 +365,15 @@ if (config.jsonNameTable) {
                     });
                 }, config.regaPollInterval * 1000);
             }
-        } else {
-            log.error(err);
         }
     });
 }
 
 function getVariables() {
     regaJson('variables.fn', (err, res) => {
-        if (!err) {
+        if (err) {
+            log.error(err);
+        } else {
             Object.keys(res).forEach(id => {
                 const varName = res[id].name;
                 let change = false;
@@ -395,7 +400,7 @@ function getVariables() {
                             id: Number(id),
                             unit: res[id].unit,
                             min: res[id].min,
-                            max: res[id].max,
+                            max: res[id].max
                         }
                     };
                     payload = JSON.stringify(payload);
@@ -404,15 +409,16 @@ function getVariables() {
                 }
             });
             log.debug('rega got', Object.keys(variables).length, 'variables');
-        } else {
-            log.error(err);
         }
     });
 }
 
 function getPrograms(cb) {
     regaJson('programs.fn', (err, res) => {
-        if (!err) {
+        if (err) {
+            log.error(err);
+            cb(err);
+        } else {
             Object.keys(res).forEach(id => {
                 const programName = res[id].name;
                 let change = false;
@@ -441,10 +447,7 @@ function getPrograms(cb) {
                 }
             });
             log.debug('rega got', Object.keys(programs).length, 'programs');
-            cb(null)
-        } else {
-            log.error(err);
-            cb(err);
+            cb(null);
         }
     });
 }
@@ -670,7 +673,7 @@ const rpcMethods = {
         }
 
         if (config.regaPollTrigger) {
-            let [regaPollTriggerChannel, regaPollTriggerDatapoint] = config.regaPollTrigger.split('.');
+            const [regaPollTriggerChannel, regaPollTriggerDatapoint] = config.regaPollTrigger.split('.');
             if (params[1] === regaPollTriggerChannel && params[2] === regaPollTriggerDatapoint) {
                 getPrograms(() => {
                     getVariables();
