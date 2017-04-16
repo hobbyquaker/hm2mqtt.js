@@ -35,6 +35,17 @@ const getParamsetTimeout = {};
 const paramsetQueue = {};
 const lastEvent = {};
 
+const programs = {};
+const programNames = {};
+const variables = {};
+const variableNames = {};
+const variableType = {
+    2: 'BOOL',
+    4: 'FLOAT',
+    16: 'INTEGER',
+    20: 'STRING'
+};
+
 let mqttConnected;
 
 log.info('mqtt trying to connect', config.mqttUrl);
@@ -87,10 +98,10 @@ mqtt.on('message', (topic, payload) => {
     } else if (parts.length === 3 && parts[1] === 'set') {
         if (variables[parts[2]]) {
             // Topic <name>/set/<variableName>
-
+            setVar(variables[parts[2]], payload);
         } else if (programs[parts[2]]) {
             // Topic <name>/set/<programName>
-
+            setProgram(programs[parts[2]], payload);
         } else {
             log.error('unknown variable/program', parts[2]);
         }
@@ -98,6 +109,80 @@ mqtt.on('message', (topic, payload) => {
         log.error('mqtt <', topic, payload);
     }
 });
+
+function setVar(variable, payload) {
+    log.debug(variable, payload);
+    let val;
+    if (payload.indexOf('{') === 0) {
+        try {
+            val = JSON.parse(payload).val;
+        } catch (err) {
+            val = payload;
+        }
+    } else {
+        val = payload;
+    }
+
+    switch (variable.type) {
+        case 'BOOL':
+            // OMG this is so ugly...
+            if (val === 'false') {
+                val = false;
+            } else if (!isNaN(val)) { // Make sure that the string "0" gets casted to boolean false
+                val = Number(val);
+            }
+            val = Boolean(val);
+            break;
+        case 'FLOAT':
+            val = parseFloat(val) || 0;
+            break;
+        case 'INTEGER':
+            if (typeof val === 'string') {
+                if (variable.enum && (variable.enum.indexOf(val) !== -1)) {
+                    val = variable.enum.indexOf(val);
+                }
+            }
+            val = parseInt(val, 10) || 0;
+            break;
+        case 'STRING':
+            val = '"' + String(val) + '"';
+            break;
+        default:
+    }
+    let script = 'dom.GetObject(' + variable.id + ').State(' + val + ');';
+    log.debug(script);
+    rega(script, (err) => {
+        if (err) log.error(err);
+    });
+}
+
+function setProgram(program, payload) {
+    log.debug(program, payload);
+    let val;
+    let script;
+    if (payload.indexOf('{') === 0) {
+        try {
+            val = JSON.parse(payload).val;
+        } catch (err) {
+            val = payload;
+        }
+    } else {
+        val = payload;
+    }
+    if (val === 'start') {
+        script = 'dom.GetObject(' + program.id + ').ProgramExecute();';
+    } else {
+        if (val === 'false') {
+            val = false;
+        }
+        val = Boolean(val);
+        script = 'dom.GetObject(' + program.id + ').Active(' + val + ');';
+    }
+    log.debug(script);
+    rega(script, (err) => {
+        if (err) log.error(err);
+    });
+}
 
 function rpc(iface, command, callid, payload) {
     if (rpcClient[iface]) {
@@ -262,55 +347,106 @@ if (config.jsonNameTable) {
             reverseNames();
             log.info('saving', 'names_' + fileName());
             pjson.save('names_' + fileName(), names);
-            getVariables();
+            if (config.regaPollInterval || config.regaPollTrigger) {
+                getPrograms(() => {
+                    getVariables();
+                });
+            }
+            if (config.regaPollInterval > 0) {
+                log.debug('rega poll interval', config.regaPollInterval);
+                setInterval(() => {
+                    getPrograms(() => {
+                        getVariables();
+                    });
+                }, config.regaPollInterval * 1000);
+            }
         } else {
             log.error(err);
         }
     });
-}
-
-let programs = {};
-const programNames = {};
-let variables = {};
-let variableNames = {};
-const variableType = {
-    2: 'BOOL',
-    4: 'FLOAT',
-    16: 'INTEGER',
-    20: 'STRING'
-};
-
-function pollVariables() {
-
 }
 
 function getVariables() {
     regaJson('variables.fn', (err, res) => {
         if (!err) {
-            console.log(res);
             Object.keys(res).forEach(id => {
-                const varName = res[id].Name;
+                const varName = res[id].name;
+                let change = false;
+                if (!variables[varName] || (res[id].val !== variables[varName].val) || (res[id].ts !== variables[varName].ts)) {
+                    change = true;
+                }
                 variables[varName] = {
                     id: Number(id),
-                    val: res[id].Value,
-                    min: res[id].Min,
-                    max: res[id].Max,
-                    unit: res[id].ValueUnit,
-                    type: variableType[res[id].ValueType],
-                    'enum': res[id].ValueList ? res[id].ValueList.split(';') : []
+                    val: res[id].val,
+                    min: res[id].min,
+                    max: res[id].max,
+                    unit: res[id].unit,
+                    ts: res[id].ts,
+                    type: variableType[res[id].type],
+                    enum: res[id].enum ? res[id].enum.split(';') : undefined
                 };
                 variableNames[Number(id)] = varName;
+                if (change) {
+                    const topic = config.name + '/status/' + varName;
+                    let payload = {
+                        val: res[id].val,
+                        ts: res[id].ts,
+                        hm: {
+                            id: Number(id),
+                            unit: res[id].unit,
+                            min: res[id].min,
+                            max: res[id].max,
+                        }
+                    };
+                    payload = JSON.stringify(payload);
+                    log.debug('mqtt >', topic, payload);
+                    mqtt.publish(topic, payload, {retain: true});
+                }
             });
-            log.info('saving', 'variables_' + fileName());
-            pjson.save('variables_' + fileName(), variables);
+            log.debug('rega got', Object.keys(variables).length, 'variables');
         } else {
             log.error(err);
         }
     });
 }
 
-function getPrograms() {
-
+function getPrograms(cb) {
+    regaJson('programs.fn', (err, res) => {
+        if (!err) {
+            Object.keys(res).forEach(id => {
+                const programName = res[id].name;
+                let change = false;
+                if (!programs[programName] || (res[id].val !== programs[programName].val) || (res[id].ts !== programs[programName].ts)) {
+                    change = true;
+                }
+                programs[programName] = {
+                    id: Number(id),
+                    active: res[id].active,
+                    ts: res[id].ts
+                };
+                programNames[Number(id)] = programName;
+                if (change) {
+                    const topic = config.name + '/status/' + programName;
+                    let payload = {
+                        val: res[id].active,
+                        ts: res[id].ts,
+                        lc: res[id].lc,
+                        hm: {
+                            id: Number(id)
+                        }
+                    };
+                    payload = JSON.stringify(payload);
+                    log.debug('mqtt >', topic, payload);
+                    mqtt.publish(topic, payload, {retain: true});
+                }
+            });
+            log.debug('rega got', Object.keys(programs).length, 'programs');
+            cb(null)
+        } else {
+            log.error(err);
+            cb(err);
+        }
+    });
 }
 
 log.debug('discover interfaces');
@@ -374,7 +510,7 @@ function createIface(name, protocol, port) {
         rpcClient[name].on('connect', () => {
             initIface(name, protocol, port);
         });
-        rpcClient[name].on('error', (err) => {
+        rpcClient[name].on('error', err => {
             log.error('rpc', name, err ? err.code || err : '');
         });
     } else {
@@ -531,6 +667,15 @@ const rpcMethods = {
         if (params[1] === 'CENTRAL' && params[2] === 'PONG') {
             callback(null, '');
             return;
+        }
+
+        if (config.regaPollTrigger) {
+            let [regaPollTriggerChannel, regaPollTriggerDatapoint] = config.regaPollTrigger.split('.');
+            if (params[1] === regaPollTriggerChannel && params[2] === regaPollTriggerDatapoint) {
+                getPrograms(() => {
+                    getVariables();
+                });
+            }
         }
 
         const key = params[1] + '/' + params[2];

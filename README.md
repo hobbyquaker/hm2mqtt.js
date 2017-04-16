@@ -52,6 +52,18 @@ Options:
 * RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` (JSON encoded Array as payload)
 
 
+### ReGa (Homematic variables and programs)
+
+To receive changes from ReGa you have to set `--rega-poll-interval` and/or `--rega-poll-trigger`. 
+`--rega-poll-trigger` can be set to e.g. `BidCoS-RF:50.PRESS_SHORT`, then a polling is done whenever this virtual button 
+is pressed. This is meant to create a "pseudo push mechanism" where a program on the ccu reacts on variable changes and 
+presses this virtual button.
+
+Variables and Programs are published to `<name>/status/<variableOrProgramName>` and can be set by sending a message to
+`<name>/set/<variableOrProgramName>`. Publishing `true` or `false` to a program activates/deactivates the program. To
+start a program publish the string `start`.
+
+
 ## License
 
 MIT (c) 2017 [Sebastian Raff](https://github.com/hobbyquaker)

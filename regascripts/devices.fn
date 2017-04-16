@@ -1,8 +1,8 @@
-!# devices.fn 1.4
+!# devices.fn hm2mqtt
 !#
-!# Dieses Homematic-Script gibt eine Liste aller Geraete/Kanaele als JSON String aus
+!# Dieses Homematic-Script gibt eine Liste aller Geraete/Kanaele im JSON Format aus
 !#
-!# 3'2013-7'2013 hobbyquaker https://github.com/hobbyquaker
+!# 3'2013-4'2017 hobbyquaker https://github.com/hobbyquaker
 !#
 
 string sDevId;

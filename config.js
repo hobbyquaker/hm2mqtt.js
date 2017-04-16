@@ -33,7 +33,9 @@ module.exports = require('yargs')
         'listen-port': 2126,
         'binrpc-listen-port': 2127,
         'ping-interval': 30,
-        'hmip-reconnect-interval': 600
+        'hmip-reconnect-interval': 600,
+        'rega-poll-interval': 0,
+        'rega-poll-trigger': ''
     })
     .demandOption([
         'ccu-address'
