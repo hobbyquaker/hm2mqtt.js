@@ -16,7 +16,7 @@ be used with Homematic IP also.
 
 ### Installation
 
-Prerequisites: [Node.js](https://nodejs.org)
+Prerequisites: [Node.js](https://nodejs.org) 6.0 or higher.
 
 `npm install -g hm2mqtt`
 
@@ -38,7 +38,7 @@ Use `hm2mqtt --help` to get a list of available options.
 `<name>/set/<channelAddress_or_channelName>/<paramset>/<datapoint>`.
 * RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` 
 (JSON encoded Array as payload). The callId can be an arbitrary string, its purpose is just to collate the response
-to the command.
+to the command. iface can be one of `hmip`, `rfd` or `hs485d`.
 
 
 ### Device and Channel Names

@@ -40,5 +40,8 @@
   },
   "devDependencies": {
     "xo": "^0.18.1"
+  },
+  "engines": {
+    "node": ">=6.0.0"
   }
 }
