@@ -7,6 +7,11 @@ module.exports = require('yargs')
     .describe('mqtt-url', 'mqtt broker url. See https://github.com/mqttjs/MQTT.js#connect-using-a-url')
     .describe('mqtt-username', 'mqtt broker username')
     .describe('mqtt-password', 'mqtt broker password')
+    .describe('ping-interval', 'Send a Ping if no event occured in the last interval. Re-Init on next interval')
+    .describe('disable-rega', 'Don\'t sync names from ReGa')
+    .describe('json-name-table', 'A JSON file that maps device and channel addresses to names')
+    .describe('rega-poll-interval', 'Interval in seconds to poll variables from Rega. Set to 0 to disable polling')
+    .describe('rega-poll-trigger', 'A virtual button that triggers a variable poll. Example: BidCoS-RF:50.PRESS_SHORT')
     .describe('help', 'show help')
     .alias({
         a: 'ccu-address',

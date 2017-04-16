@@ -13,6 +13,7 @@ re-implement this with Node.js
 It's kind of the same like the original hm2mqtt, but it supports XMLRPC (hm2mqtt only supports BINRPC), so it can 
 be used with Homematic IP also.
 
+
 ### Installation
 
 Prerequisites: [Node.js](https://nodejs.org)
@@ -22,34 +23,38 @@ Prerequisites: [Node.js](https://nodejs.org)
 I suggest to use [pm2](http://pm2.keymetrics.io/) to manage the hm2mqtt process (start on system boot, manage log files, 
 ...)
 
+
 ### Command Line Options
 
-```
-Usage: hm2mqtt [options]
-
-Options:
-  --version                 Show version number                        [boolean]
-  -h, --help                Show help                                  [boolean]
-  -m, --mqtt-url            mqtt broker url.       [default: "mqtt://127.0.0.1"]
-  -n, --name                instance name. used as mqtt client id and as prefix
-                            for connected topic                  [default: "hm"]
-  -p, --mqtt-password       mqtt broker password
-  -u, --mqtt-username       mqtt broker username
-  -v, --verbosity           possible values: "error", "warn", "info", "debug"
-                                                               [default: "info"]
-  -a, --ccu-address                                                   [required]
-  -d, --disable-rega                                            [default: false]
-  -r, --listen-address                                    [default: "127.0.0.1"]
-  -l, --listen-port                                              [default: 2126]
-  -b, --binrpc-listen-port                                       [default: 2127]
-```
-
+Use `hm2mqtt --help` to get a list of available options.
 
 ### Topics
 
-* Events are published on `<name>/status/<channelName>/<datapoint>` (JSON payload, follows [mqtt-smarthome payload format](https://github.com/mqtt-smarthome/mqtt-smarthome/blob/master/Architecture.md))
-* Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (can be plain or JSON payload)
-* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` (JSON encoded Array as payload)
+* Events are published on `<name>/status/<channelName>/<datapoint>` (JSON payload, follows 
+[mqtt-smarthome payload format](https://github.com/mqtt-smarthome/mqtt-smarthome/blob/master/Architecture.md))
+* Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (can be plain or JSON payload). Example:
+`hmip/set/Light_Garage/STATE`,
+* Values from Paramsets other than `VALUES` can be set via 
+`<name>/set/<channelAddress_or_channelName>/<paramset>/<datapoint>`.
+* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` 
+(JSON encoded Array as payload). The callId can be an arbitrary string, its purpose is just to collate the response
+to the command.
+
+
+### Device and Channel Names
+
+Device and Channel names are queried from ReGa, this can be disabled by setting the `--disable-rega` option. To trigger
+a re-read after changes on the ReGa you can publish a message to `<name>/command/regasync` or just restart hm2mqtt.
+As an alternative to using the names from ReGa you can also supply a json file with the `--json-name-table` option 
+containing address to name mappings, created by e.g. 
+[homematic-manager](https://github.com/hobbyquaker/homematic-manager). This file should look like:
+```javascript
+{
+    "EEQ1234567": "Device Name",
+    "EEQ1234567:1": "Channel Name",
+    ...
+}
+```
 
 
 ### ReGa (Homematic variables and programs)
