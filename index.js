@@ -285,14 +285,19 @@ function rpcType(payload, paramset) {
     return val;
 }
 
-function rpcSet(name, paramset, datapoint, payload) {
-    const address = addresses[name] || name;
-    let iface;
+function findIface(address) {
+    let iface = null;
     Object.keys(devices).forEach(i => {
         if (devices[i][address]) {
             iface = i;
         }
     });
+    return iface;
+}
+
+function rpcSet(name, paramset, datapoint, payload) {
+    const address = addresses[name] || name;
+    const iface = findIface(address);
     if (!iface) {
         log.error('unknown device', address);
         return;
