@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
   "bin": {"hm2mqtt": "./index.js"},
@@ -27,7 +27,7 @@
   "homepage": "https://github.com/hobbyquaker/hm2mqtt.js",
   "dependencies": {
     "async": "^2.3.0",
-    "binrpc": "^1.0.0",
+    "binrpc": "^2.1.2",
     "homematic-xmlrpc": "^1.0.2",
     "mqtt": "^2.6.2",
     "persist-json": "^1.0.1",
