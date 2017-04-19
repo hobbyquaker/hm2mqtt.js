@@ -76,7 +76,7 @@ mqtt.on('connect', () => {
 mqtt.on('close', () => {
     if (mqttConnected) {
         mqttConnected = false;
-        log.info('mqtt closed ' + config.mqttUrl);
+        log.error('mqtt closed ' + config.mqttUrl);
     }
 });
 
@@ -568,10 +568,14 @@ function initIface(name, protocol) {
         url = 'http://' + config.listenAddress + ':' + config.listenPort;
     }
     const params = [url, 'hm2mqtt_' + name];
-    log.debug('rpc', name, '> init', params);
+    log.info('rpc', name, '> init', params);
     lastEvent[name] = (new Date()).getTime();
     rpcClient[name].methodCall('init', params, (err, res) => {
-        log.debug('rpc', name, '< init', err, JSON.stringify(res));
+        if (err) {
+            log.error(err);
+        } else {
+            log.debug('rpc', name, '< init', JSON.stringify(res));
+        }
         stopIface[name] = cb => {
             const stopParams = [url, ''];
             log.info('rpc', name, '> init', stopParams);
@@ -690,7 +694,7 @@ const rpcMethods = {
         lastEvent[ifaceName(params[0])] = ts;
 
         if (params[1] === 'CENTRAL' && params[2] === 'PONG') {
-            callback(null, '');
+            if (typeof callback === 'function') callback(null, '');
             return;
         }
 
@@ -826,8 +830,8 @@ const rpcMethods = {
         params[1].forEach(dev => {
             devs[dev.ADDRESS] = dev;
         });
-        log.debug('saving', 'devices_' + fileName(name), '(' + Object.keys(devices[name]).length + ')');
         devices[name] = devs;
+        log.debug('saving', 'devices_' + fileName(name), '(' + Object.keys(devices[name]).length + ')');
         pjson.save('devices_' + fileName(name), devs);
         callback(null, '');
         getParamsetTimeout[params[0]] = setTimeout(() => {
