@@ -227,6 +227,64 @@ function rpc(iface, command, callid, payload) {
     }
 }
 
+function rpcType(payload, paramset) {
+    let val;
+    if (payload.indexOf('{') === 0) {
+        try {
+            val = JSON.parse(payload).val;
+        } catch (err) {
+            val = payload;
+        }
+    } else {
+        val = payload;
+    }
+
+    switch (paramset.TYPE) {
+        case 'BOOL':
+        // eslint-disable-line no-fallthrough
+        case 'ACTION':
+            // OMG this is so ugly...
+            if (val === 'false') {
+                val = false;
+            } else if (!isNaN(val)) { // Make sure that the string "0" gets casted to boolean false
+                val = Number(val);
+            }
+            val = Boolean(val);
+            break;
+        case 'FLOAT':
+            val = parseFloat(val);
+            if (val < paramset.MIN) {
+                val = paramset.MIN;
+            } else if (val > paramset.MAX) {
+                val = paramset.MAX;
+            }
+            val = {explicitDouble: val};
+            break;
+        case 'ENUM':
+            if (typeof val === 'string') {
+                if (paramset.ENUM && (paramset.ENUM.indexOf(val) !== -1)) {
+                    val = paramset.ENUM.indexOf(val);
+                }
+            }
+        // eslint-disable-line no-fallthrough
+        case 'INTEGER':
+            val = parseInt(val, 10);
+            if (val < paramset.MIN) {
+                val = paramset.MIN;
+            } else if (val > paramset.MAX) {
+                val = paramset.MAX;
+            }
+            break;
+        case 'STRING':
+            val = String(val);
+            break;
+        default:
+
+    }
+
+    return val;
+}
+
 function rpcSet(name, paramset, datapoint, payload) {
     const address = addresses[name] || name;
     let iface;
@@ -252,59 +310,8 @@ function rpcSet(name, paramset, datapoint, payload) {
         return;
     }
 
-    let val;
-    if (payload.indexOf('{') === 0) {
-        try {
-            val = JSON.parse(payload).val;
-        } catch (err) {
-            val = payload;
-        }
-    } else {
-        val = payload;
-    }
+    const val = rpcType(payload, ps);
 
-    switch (ps.TYPE) {
-        case 'BOOL':
-            // eslint-disable-line no-fallthrough
-        case 'ACTION':
-            // OMG this is so ugly...
-            if (val === 'false') {
-                val = false;
-            } else if (!isNaN(val)) { // Make sure that the string "0" gets casted to boolean false
-                val = Number(val);
-            }
-            val = Boolean(val);
-            break;
-        case 'FLOAT':
-            val = parseFloat(val);
-            if (val < ps.MIN) {
-                val = ps.MIN;
-            } else if (val > ps.MAX) {
-                val = ps.MAX;
-            }
-            val = {explicitDouble: val};
-            break;
-        case 'ENUM':
-            if (typeof val === 'string') {
-                if (ps.ENUM && (ps.ENUM.indexOf(val) !== -1)) {
-                    val = ps.ENUM.indexOf(val);
-                }
-            }
-            // eslint-disable-line no-fallthrough
-        case 'INTEGER':
-            val = parseInt(val, 10);
-            if (val < ps.MIN) {
-                val = ps.MIN;
-            } else if (val > ps.MAX) {
-                val = ps.MAX;
-            }
-            break;
-        case 'STRING':
-            val = String(val);
-            break;
-        default:
-
-    }
     log.debug('rpc', iface, '> setValue', [address, datapoint, val]);
     rpcClient[iface].methodCall('setValue', [address, datapoint, val], err => {
         if (err) {
