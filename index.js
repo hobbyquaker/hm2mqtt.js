@@ -543,16 +543,7 @@ function createIface(name, protocol, port) {
         rpcServer[protocol] = createServer(protocol);
     }
     rpcClient[name] = createClient(protocol, port);
-    if (protocol === 'binrpc') {
-        rpcClient[name].on('connect', () => {
-            initIface(name, protocol, port);
-        });
-        rpcClient[name].on('error', err => {
-            log.error('rpc', name, err ? err.code || err : '');
-        });
-    } else {
-        initIface(name, protocol, port);
-    }
+    initIface(name, protocol, port);
 }
 
 const stopIface = {};
