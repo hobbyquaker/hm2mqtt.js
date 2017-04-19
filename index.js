@@ -694,7 +694,9 @@ const rpcMethods = {
         lastEvent[ifaceName(params[0])] = ts;
 
         if (params[1] === 'CENTRAL' && params[2] === 'PONG') {
-            if (typeof callback === 'function') callback(null, '');
+            if (typeof callback === 'function') {
+                callback(null, '');
+            }
             return;
         }
 
