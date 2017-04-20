@@ -6,7 +6,7 @@
   "bin": {"hm2mqtt": "./index.js"},
   "preferGlobal": true,
   "scripts": {
-    "test": "xo --space 4 && ./test.js"
+    "test": "xo --space 4 --ignore test.js && ./test.js"
   },
   "repository": {
     "type": "git",
