@@ -84,6 +84,35 @@ mqtt.on('error', err => {
     log.error('mqtt', err);
 });
 
+mqtt.on('close', () => {
+    log.warn('mqtt close');
+});
+
+mqtt.on('offline', () => {
+    log.warn('mqtt offline');
+});
+
+mqtt.on('reconnect', () => {
+    log.info('mqtt reconnect');
+});
+
+function mqttPublish(topic, payload, options) {
+    if (typeof payload === 'object') {
+        payload = JSON.stringify(payload);
+    } else if (payload) {
+        payload = String(payload);
+    } else {
+        payload = '';
+    }
+    mqtt.publish(topic, payload, options, err => {
+        if (err) {
+            log.error('mqtt publish', err);
+        } else {
+            log.debug('mqtt >', topic, payload);
+        }
+    });
+}
+
 mqtt.on('message', (topic, payload) => {
     payload = payload.toString();
     log.debug('mqtt <', topic, payload);
@@ -220,8 +249,7 @@ function rpc(iface, command, callid, payload) {
             } else {
                 const topic = config.name + '/response/' + callid;
                 const payload = JSON.stringify(res);
-                log.debug('mqtt >', topic, payload);
-                mqtt.publish(topic, payload);
+                mqttPublish(topic, payload);
             }
         });
     }
@@ -438,8 +466,7 @@ function getVariables() {
                         }
                     };
                     payload = JSON.stringify(payload);
-                    log.debug('mqtt >', topic, payload);
-                    mqtt.publish(topic, payload, {retain: true});
+                    mqttPublish(topic, payload, {retain: true});
                 }
             });
             log.debug('rega got', Object.keys(variables).length, 'variables');
@@ -476,8 +503,7 @@ function getPrograms(cb) {
                         }
                     };
                     payload = JSON.stringify(payload);
-                    log.debug('mqtt >', topic, payload);
-                    mqtt.publish(topic, payload, {retain: true});
+                    mqttPublish(topic, payload, {retain: true});
                 }
             });
             log.debug('rega got', Object.keys(programs).length, 'programs');
@@ -747,8 +773,7 @@ const rpcMethods = {
 
         const retain = ps.TYPE !== 'ACTION';
 
-        log.debug('mqtt >', topic, payload, 'retain:', retain);
-        mqtt.publish(topic, payload, {retain});
+        mqttPublish(topic, payload, {retain});
 
         if (typeof callback === 'function') {
             callback(null, '');
