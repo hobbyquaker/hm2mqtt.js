@@ -611,6 +611,10 @@ function paramsetName(dev) {
 
 function createParamsetQueue(name) {
     name = ifaceName(name);
+    if (!devices[name]) {
+        log.error('createParamsetQueue called for unknown devices', name);
+        return;
+    }
     log.info(name, 'got', Object.keys(devices[name]).length, 'devices and channels');
 
     log.debug('createParamsetQueue', name);
