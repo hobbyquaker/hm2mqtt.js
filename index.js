@@ -334,7 +334,7 @@ function rpcSet(name, paramset, datapoint, payload) {
     let ps = paramsetDescriptions[psName];
     ps = ps && ps[paramset] && ps[paramset][datapoint];
     if (!ps) {
-        log.error('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramset + '.' + datapoint);
+        log.warn('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramset + '.' + datapoint);
         return;
     }
 
