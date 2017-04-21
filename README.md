@@ -10,8 +10,8 @@
 Because [hm2mqtt](https://github.com/owagner/hm2mqtt) isn't developed anymore and I don't really like Java I decided to 
 re-implement this with Node.js
 
-It's kind of the same like the original hm2mqtt, but it supports XMLRPC (hm2mqtt only supports BINRPC), so it can 
-be used with Homematic IP also.
+It's kind of the same like the original hm2mqtt, but it supports BINRPC and XMLRPC (hm2mqtt only supports BINRPC), so it 
+can be used with Homematic IP also. Furthermore it supports Rega variables and programs.
 
 
 ### Installation
@@ -27,6 +27,7 @@ I suggest to use [pm2](http://pm2.keymetrics.io/) to manage the hm2mqtt process 
 ### Command Line Options
 
 Use `hm2mqtt --help` to get a list of available options.
+
 
 ### Topics
 
