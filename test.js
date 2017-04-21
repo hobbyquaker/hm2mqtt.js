@@ -2,25 +2,29 @@
 
 const cp = require('child_process');
 const path = require('path');
+const StreamSplitter = require("stream-splitter");
 
 const cmd = path.join(__dirname, '/index.js');
 const args = ['-m mqtt://127.0.0.1:1883', '--ccu-address', '127.0.0.1', '-v', 'debug'];
 
 const hm2mqtt = cp.spawn(cmd, args);
 
-hm2mqtt.stdout.on('data', (data) => {
-    data = data.toString().replace('\n', '');
-    console.log(`stdout: ${data}`);
+let stdout = hm2mqtt.stdout.pipe(StreamSplitter('\n'));
+let stderr = hm2mqtt.stderr.pipe(StreamSplitter('\n'));
 
-    if (data.toString().match(/mqtt connect/)) {
-        console.log('\n\ntest passed: successful mqtt connection');
-        process.exit(0);
-    }
+stderr.on('token', (data) => {
+    data = data.toString();
+    console.log(data);
 });
 
-hm2mqtt.stderr.on('data', data => {
-    data = data.toString().replace('\n', '');
-    console.log(`stderr: ${data}`);
+stdout.on('token', (data) => {
+    data = data.toString();
+    console.log(data);
+
+    if (data.toString().match(/mqtt connected/)) {
+        console.log('\n\nTest passed. Successful mqtt connection.');
+        process.exit(0);
+    }
 });
 
 hm2mqtt.on('close', code => {

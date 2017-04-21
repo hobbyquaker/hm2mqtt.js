@@ -3,7 +3,9 @@
   "version": "1.0.5",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
-  "bin": {"hm2mqtt": "./index.js"},
+  "bin": {
+    "hm2mqtt": "./index.js"
+  },
   "preferGlobal": true,
   "scripts": {
     "test": "xo --space 4 --ignore test.js && ./test.js"
@@ -35,13 +37,14 @@
     "yalm": "^4.0.2",
     "yargs": "^7.0.2"
   },
-  "yargs": {
-    "boolean-negation": false
-  },
   "devDependencies": {
+    "stream-splitter": "latest",
     "xo": "latest"
   },
   "engines": {
     "node": ">=6.0.0"
+  },
+  "yargs": {
+    "boolean-negation": false
   }
 }
