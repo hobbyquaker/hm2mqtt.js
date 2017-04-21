@@ -763,7 +763,7 @@ const rpcMethods = {
         const topic = config.name + '/status/' + (names[params[1]] || params[1]) + '/' + params[2];
 
         let payload = {val: params[3], ts, lc: changes[key], hm: {ADDRESS: params[1]}};
-        if (ps.UNIT) {
+        if (ps.UNIT && ps.UNIT !== '""') {
             payload.hm.UNIT = ps.UNIT;
         }
         if (ps.TYPE === 'ENUM') {
