@@ -122,6 +122,7 @@ mqtt.on('message', (topic, payload) => {
         rpcSet(parts[2], 'VALUES', parts[3], payload);
     } else if (parts.length === 5 && parts[1] === 'set') {
         // Topic <name>/set/<channel>/<paramset>/<datapoint>
+        // Todo Putparamset
         rpcSet(parts[2], parts[3], parts[4], payload);
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
@@ -345,6 +346,7 @@ function rpcSet(name, paramset, datapoint, payload) {
 
     const val = rpcType(payload, ps);
 
+    // Todo Putparamset
     log.debug('rpc', iface, '> setValue', [address, datapoint, val]);
     rpcClient[iface].methodCall('setValue', [address, datapoint, val], err => {
         if (err) {
@@ -787,8 +789,10 @@ const rpcMethods = {
         log.debug('rpc < listDevices', params);
         const name = ifaceName(params[0]);
         const ret = [];
+        const test = [];
         if (devices[name]) {
             Object.keys(devices[name]).forEach(address => {
+                test.push(devices[name][address]);
                 /* Todo This does not work: https://github.com/eq-3/occu/issues/45
                 if (name === 'hmip') {
                     ret.push({
