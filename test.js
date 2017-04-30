@@ -159,6 +159,10 @@ describe('hm2mqtt - hm-simulator connection', () => {
             done();
         });
     });
+
+});
+
+describe('hm2mqtt - hm-simulator - mqtt', () => {
     it('hm2mqtt should receive a BidCoS-RF:1 PRESS_SHORT event', function (done) {
         this.timeout(12000);
         subscribe('hm', /rpc < event \["hm2mqtt_rfd","BidCoS-RF:1","PRESS_SHORT",true\]/, data => {
@@ -170,6 +174,13 @@ describe('hm2mqtt - hm-simulator connection', () => {
         subscribe('hm', /mqtt > hm\/status\/BidCoS-RF:1\/PRESS_SHORT/, data => {
             done();
         });
+    });
+    it('hm2mqtt should publish a BidCoS-RF:2 PRESS_SHORT event', function (done) {
+        this.timeout(12000);
+        subscribe('hm', /mqtt > hm\/status\/BidCoS-RF:2\/PRESS_SHORT/, data => {
+            done();
+        });
+        mqtt.publish('hm/set/BidCoS-RF:2/PRESS_SHORT', 'true');
     });
 });
 
