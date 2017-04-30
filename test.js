@@ -159,7 +159,18 @@ describe('hm2mqtt - hm-simulator connection', () => {
             done();
         });
     });
-
+    it('hm2mqtt should save paramsetDescriptions (1)', function (done) {
+        this.timeout(180000);
+        subscribe('hm', /saving paramsetDescriptions/, data => {
+            done();
+        });
+    });
+    it('hm2mqtt should save paramsetDescriptions (2)', function (done) {
+        this.timeout(180000);
+        subscribe('hm', /saving paramsetDescriptions/, data => {
+            done();
+        });
+    });
 });
 
 describe('hm2mqtt - hm-simulator - mqtt', () => {
