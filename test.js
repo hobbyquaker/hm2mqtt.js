@@ -146,6 +146,32 @@ describe('hm2mqtt - mqtt connection', () => {
     });
 });
 
+describe('hm2mqtt - hm-simulator connection', () => {
+    it('hm2mqtt should have rfd devices', function (done) {
+        this.timeout(12000);
+        subscribe('hm', /rfd got [0-9]+ devices and channels/, data => {
+            done();
+        });
+    });
+    it('hm2mqtt should have hmip devices', function (done) {
+        this.timeout(12000);
+        subscribe('hm', /hmip got [0-9]+ devices and channels/, data => {
+            done();
+        });
+    });
+    it('hm2mqtt should receive a BidCoS-RF:1 PRESS_SHORT event', function (done) {
+        this.timeout(12000);
+        subscribe('hm', /rpc < event \["hm2mqtt_rfd","BidCoS-RF:1","PRESS_SHORT",true\]/, data => {
+            done();
+        });
+    });
+    it('hm2mqtt should publish a mqtt message on hm/status/BidCoS-RF:1/PRESS_SHORT', function (done) {
+        this.timeout(12000);
+        subscribe('hm', /mqtt > hm\/status\/BidCoS-RF:1\/PRESS_SHORT/, data => {
+            done();
+        });
+    });
+});
 
 setTimeout(() => {
     hm2mqtt.kill();
