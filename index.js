@@ -317,7 +317,7 @@ function rpcType(payload, paramset) {
 function findIface(address) {
     let iface = null;
     Object.keys(devices).forEach(i => {
-        if (devices[i][address]) {
+        if (devices[i] && devices[i][address]) {
             iface = i;
         }
     });
