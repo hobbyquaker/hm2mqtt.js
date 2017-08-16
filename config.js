@@ -12,6 +12,8 @@ module.exports = require('yargs')
     .describe('json-name-table', 'A JSON file that maps device and channel addresses to names')
     .describe('rega-poll-interval', 'Interval in seconds to poll variables from Rega. Set to 0 to disable polling')
     .describe('rega-poll-trigger', 'A virtual button that triggers a variable poll. Example: BidCoS-RF:50.PRESS_SHORT')
+    .describe('listen-address', 'Address the RPC servers bind to')
+    .describe('init-address', 'Address used in the RPC init. Normally there is no need to set this')
     .describe('help', 'show help')
     .alias({
         a: 'ccu-address',
@@ -26,6 +28,7 @@ module.exports = require('yargs')
         p: 'mqtt-password',
         q: 'hmip-reconnect-interval',
         r: 'listen-address',
+        s: 'init-address',
         u: 'mqtt-username',
         v: 'verbosity'
     })
