@@ -20,6 +20,7 @@ const rpcClient = {};
 const rpcServer = {};
 const values = {};
 const changes = {};
+const working = {};
 let names = {};
 const addresses = {};
 function reverseNames() {
@@ -735,6 +736,10 @@ const rpcMethods = {
             return;
         }
 
+        if (params[2] === 'WORKING' || params[2] === 'DIRECTION') {
+            working[params[1]] = Boolean(params[3]);
+        }
+
         if (config.regaPollTrigger) {
             const [regaPollTriggerChannel, regaPollTriggerDatapoint] = config.regaPollTrigger.split('.');
             if (params[1] === regaPollTriggerChannel && params[2] === regaPollTriggerDatapoint) {
@@ -745,6 +750,7 @@ const rpcMethods = {
         }
 
         const key = params[1] + '/' + params[2];
+
         if (values[key] !== params[3]) {
             changes[key] = ts;
             values[key] = params[3];
