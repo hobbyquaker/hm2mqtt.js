@@ -26,6 +26,11 @@ I suggest to use [pm2](http://pm2.keymetrics.io/) to manage the hm2mqtt process 
 ...)
 
 
+#### Docker
+
+[Holger Imbery](https://github.com/holgerimbery) created a [Dockerfile for hm2mqtt.js](https://github.com/holgerimbery/docker_hm2mqtt).
+
+
 ### Command Line Options
 
 Use `hm2mqtt --help` to get a list of available options.
