@@ -68,6 +68,12 @@ mqtt.on('connect', () => {
     log.info('mqtt subscribe', config.name + '/set/#');
     mqtt.subscribe(config.name + '/set/#');
 
+    log.info('mqtt subscribe', config.name + '/paramset/#');
+    mqtt.subscribe(config.name + '/paramset/#');
+
+    log.info('mqtt subscribe', config.name + '/rega/#');
+    mqtt.subscribe(config.name + '/rega/#');
+
     log.info('mqtt subscribe', config.name + '/rpc/#');
     mqtt.subscribe(config.name + '/rpc/#');
 
@@ -158,7 +164,6 @@ mqtt.on('message', (topic, payload) => {
 });
 
 function setVar(variable, payload) {
-    log.debug(variable, payload);
     let val;
     if (payload.indexOf('{') === 0) {
         try {
@@ -197,7 +202,7 @@ function setVar(variable, payload) {
         default:
     }
     const script = 'dom.GetObject(' + variable.id + ').State(' + val + ');';
-    log.debug(script);
+    log.debug('rega >', script);
     rega(script, err => {
         if (err) {
             log.error(err);
@@ -227,7 +232,7 @@ function setProgram(program, payload) {
         val = Boolean(val);
         script = 'dom.GetObject(' + program.id + ').Active(' + val + ');';
     }
-    log.debug(script);
+    log.debug('rega >', script);
     rega(script, err => {
         if (err) {
             log.error(err);
@@ -462,14 +467,21 @@ function getVariables() {
                 variableNames[Number(id)] = varName;
                 if (change) {
                     const topic = config.name + '/status/' + varName;
+                    let enumIndex = res[id].val;
+                    if (enumIndex === false) {
+                        enumIndex = 0;
+                    } else if (enumIndex === true) {
+                        enumIndex = 1;
+                    }
                     let payload = {
                         val: res[id].val,
                         ts: res[id].ts,
                         hm: {
                             id: Number(id),
-                            unit: res[id].unit,
-                            min: res[id].min,
-                            max: res[id].max
+                            UNIT: res[id].unit,
+                            MIN: res[id].min,
+                            MAX: res[id].max,
+                            ENUM: res[id].enum ? res[id].enum.split(';')[enumIndex] : undefined
                         }
                     };
                     payload = JSON.stringify(payload);
