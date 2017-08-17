@@ -43,7 +43,7 @@ Use `hm2mqtt --help` to get a list of available options.
 * Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (can be plain or JSON payload). Example:
 `hmip/set/Light_Garage/STATE`,
 * Values from Paramsets other than `VALUES` can be set via 
-`<name>/set/<channelAddress_or_channelName>/<paramset>/<datapoint>`.
+`<name>/paramset/<channelAddress_or_channelName>/<paramset>/<datapoint>`.
 * RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` 
 (JSON encoded Array as payload). The callId can be an arbitrary string, its purpose is just to collate the response
 to the command. iface can be one of `hmip`, `rfd` or `hs485d`.

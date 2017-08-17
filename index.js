@@ -118,13 +118,17 @@ mqtt.on('message', (topic, payload) => {
     payload = payload.toString();
     log.debug('mqtt <', topic, payload);
     const parts = topic.split('/');
-    if (parts.length === 4 && parts[1] === 'set') {
+    if (parts.length >= 4 && parts[1] === 'set') {
         // Topic <name>/set/<channel>/<datapoint>
-        rpcSet(parts[2], 'VALUES', parts[3], payload);
-    } else if (parts.length === 5 && parts[1] === 'set') {
-        // Topic <name>/set/<channel>/<paramset>/<datapoint>
-        // Todo Putparamset
-        rpcSet(parts[2], parts[3], parts[4], payload);
+        let channel = parts.slice(2, parts.length - 1).join('/');
+        let datapoint = parts[parts.length - 1];
+        rpcSet(channel, 'VALUES', datapoint, payload);
+    } else if (parts.length >= 5 && parts[1] === 'paramset') {
+        // Topic <name>/paramset/<channel>/<paramset>/<datapoint>
+        let channel = parts.slice(2, parts.length - 2).join('/');
+        let paramset = parts[parts.length - 2];
+        let datapoint = parts[parts.length - 1];
+        rpcSet(channel, paramset, datapoint, payload);
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
         const [, , iface, command, callid] = parts;
