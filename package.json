@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "1.0.8",
+  "version": "2.0.0",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
   "bin": {
