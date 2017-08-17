@@ -21,6 +21,7 @@ const rpcServer = {};
 const values = {};
 const changes = {};
 const working = {};
+const workingTimeout = {};
 let names = {};
 const addresses = {};
 function reverseNames() {
@@ -351,7 +352,6 @@ function rpcSet(name, paramset, datapoint, payload) {
 
     const val = rpcType(payload, ps);
 
-    // Todo Putparamset
     log.debug('rpc', iface, '> setValue', [address, datapoint, val]);
     rpcClient[iface].methodCall('setValue', [address, datapoint, val], err => {
         if (err) {
@@ -776,7 +776,12 @@ const rpcMethods = {
 
         let payload = {val: params[3], ts, lc: changes[key], hm: {ADDRESS: params[1]}};
         if (ps.UNIT && ps.UNIT !== '""') {
-            payload.hm.UNIT = ps.UNIT;
+            if (ps.UNIT === '�C') {
+                payload.hm.UNIT = '°C';
+            } else {
+                payload.hm.UNIT = ps.UNIT;
+            }
+
         }
         if (ps.TYPE === 'ENUM') {
             payload.hm.ENUM = ps.VALUE_LIST[params[3]];
@@ -786,6 +791,15 @@ const rpcMethods = {
         const retain = ps.TYPE !== 'ACTION';
 
         mqttPublish(topic, payload, {retain});
+
+        if (typeof working[params[1]] !== 'undefined' && (params[2] === 'LEVEL' || params[2] === 'STATE')) {
+            clearTimeout(workingTimeout[params[1]]);
+            workingTimeout[params[1]] = setTimeout(() => {
+                if (!working[params[1]]) {
+                    mqttPublish(topic + '_NOTWORKING', payload, {retain});
+                }
+            }, 500);
+        }
 
         if (typeof callback === 'function') {
             callback(null, '');
