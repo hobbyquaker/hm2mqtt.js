@@ -120,14 +120,14 @@ mqtt.on('message', (topic, payload) => {
     const parts = topic.split('/');
     if (parts.length >= 4 && parts[1] === 'set') {
         // Topic <name>/set/<channel>/<datapoint>
-        let channel = parts.slice(2, parts.length - 1).join('/');
-        let datapoint = parts[parts.length - 1];
+        const channel = parts.slice(2, parts.length - 1).join('/');
+        const datapoint = parts[parts.length - 1];
         rpcSet(channel, 'VALUES', datapoint, payload);
     } else if (parts.length >= 5 && parts[1] === 'paramset') {
         // Topic <name>/paramset/<channel>/<paramset>/<datapoint>
-        let channel = parts.slice(2, parts.length - 2).join('/');
-        let paramset = parts[parts.length - 2];
-        let datapoint = parts[parts.length - 1];
+        const channel = parts.slice(2, parts.length - 2).join('/');
+        const paramset = parts[parts.length - 2];
+        const datapoint = parts[parts.length - 1];
         rpcSet(channel, paramset, datapoint, payload);
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
