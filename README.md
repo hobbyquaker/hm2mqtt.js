@@ -73,7 +73,7 @@ is pressed. This is meant to create a "pseudo push mechanism" where a program on
 presses this virtual button.
 
 Variables and Programs are published to `<name>/status/<variableOrProgramName>` and can be set by sending a message to
-`<name>/set/<variableOrProgramName>`. Publishing `true` or `false` to a program activates/deactivates the program. To
+`<name>/rega/<variableOrProgramName>`. Publishing `true` or `false` to a program activates/deactivates the program. To 
 start a program publish the string `start`.
 
 

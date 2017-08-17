@@ -133,15 +133,15 @@ mqtt.on('message', (topic, payload) => {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
         const [, , iface, command, callid] = parts;
         rpc(iface, command, callid, payload);
-    } else if (parts.length === 3 && parts[1] === 'set') {
-        if (variables[parts[2]]) {
-            // Topic <name>/set/<variableName>
-            setVar(variables[parts[2]], payload);
-        } else if (programs[parts[2]]) {
-            // Topic <name>/set/<programName>
-            setProgram(programs[parts[2]], payload);
+    } else if (parts.length >= 3 && parts[1] === 'rega') {
+        // Topic <name>/rega/<variableOrProgramName>
+        const name = parts.slice(2, parts.length);
+        if (variables[name]) {
+            setVar(variables[name], payload);
+        } else if (programs[name]) {
+            setProgram(programs[name], payload);
         } else {
-            log.error('unknown variable/program', parts[2]);
+            log.error('unknown variable/program', name);
         }
     } else if (parts[1] === 'command') {
         switch (parts[2]) {
