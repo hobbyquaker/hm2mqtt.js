@@ -781,7 +781,6 @@ const rpcMethods = {
             } else {
                 payload.hm.UNIT = ps.UNIT;
             }
-
         }
         if (ps.TYPE === 'ENUM') {
             payload.hm.ENUM = ps.VALUE_LIST[params[3]];
