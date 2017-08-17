@@ -77,6 +77,13 @@ Variables and Programs are published to `<name>/status/<variableOrProgramName>` 
 start a program publish the string `start`.
 
 
+### _NOTWORKING datapoints
+
+hm2mqtt sends virtual datapoints named `LEVEL_NOTWORKING` respectively `STATE_NOTWORKING` for actuators that have a 
+`WORKING` and/or `DIRECTION` datapoint. The `*_NOTWORKING` datapoints are only updated when `WORKING` is `false` - this 
+is useful for e.g. sliders in a UI to prevent jumping sliders when a Blind or Keymatic is moving or a Dimmer is dimming.
+
+
 ## License
 
 MIT (c) 2017 [Sebastian Raff](https://github.com/hobbyquaker)
