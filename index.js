@@ -410,7 +410,7 @@ function getRegaDeviceNames(cb) {
         } else {
             names = res;
             reverseNames();
-            log.info('saving', 'names_' + fileName());
+            log.info('got', Object.keys(names).length, 'names from rega. saving', 'names_' + fileName());
             pjson.save('names_' + fileName(), names);
             if (typeof cb === 'function') {
                 cb();
