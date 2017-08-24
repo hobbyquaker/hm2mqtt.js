@@ -1,6 +1,7 @@
 const pkg = require('./package.json');
 
 module.exports = require('yargs')
+    .env('HM2MQTT')
     .usage(pkg.name + ' ' + pkg.version + '\n' + pkg.description + '\n\nUsage: $0 [options]')
     .describe('verbosity', 'possible values: "error", "warn", "info", "debug"')
     .describe('name', 'instance name. used as mqtt client id and as prefix for connected topic')
