@@ -33,7 +33,8 @@ I suggest to use [pm2](http://pm2.keymetrics.io/) to manage the hm2mqtt process 
 
 ### Command Line Options
 
-Use `hm2mqtt --help` to get a list of available options.
+Use `hm2mqtt --help` to get a list of available options. All options can also be set per environment variable (e.g. 
+setting `HM2MQTT_VERBOSITY=debug` has the same effect as using `--verbosity debug` as commandline parameter).
 
 
 ### Topics
