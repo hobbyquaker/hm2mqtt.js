@@ -16,6 +16,7 @@ module.exports = require('yargs')
     .describe('listen-address', 'Address the RPC servers bind to')
     .describe('init-address', 'Address used in the RPC init. Normally there is no need to set this')
     .describe('help', 'show help')
+    .describe('publish-meta', '')
     .alias({
         a: 'ccu-address',
         b: 'binrpc-listen-port',
@@ -44,7 +45,8 @@ module.exports = require('yargs')
         'ping-interval': 30,
         'hmip-reconnect-interval': 600,
         'rega-poll-interval': 0,
-        'rega-poll-trigger': ''
+        'rega-poll-trigger': '',
+        'publish-meta': false
     })
     .demandOption([
         'ccu-address'

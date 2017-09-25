@@ -683,13 +683,13 @@ function publishMeta(name) {
         const dev = devices[name][address];
         const psDesc = paramsetDescriptions[paramsetName(dev)];
         const obj = {
-            name: names[address] || '',
+            name: names[address] || address,
             type: dev.PARENT_TYPE ? 'channel' : 'device',
             'interface': 'homematic',
             native: dev
         };
         obj.native.PARAMSET_DESCRIPTIONS = psDesc;
-        mqttPublish('meta/set/' + config.name + '/' + (names[address] || address), obj);
+        mqttPublish('db/extend/' + config.name + '/' + address, obj);
     });
 }
 
