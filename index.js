@@ -462,7 +462,7 @@ function getVariables() {
                     min: res[id].min,
                     max: res[id].max,
                     unit: res[id].unit,
-                    ts: res[id].ts,
+                    ts: (new Date(res[id].ts)).getTime(),
                     type: variableType[res[id].type],
                     enum: res[id].enum ? res[id].enum.split(';') : undefined
                 };
@@ -510,7 +510,7 @@ function getPrograms(cb) {
                 programs[programName] = {
                     id: Number(id),
                     active: res[id].active,
-                    ts: res[id].ts
+                    ts: (new Date(res[id].ts)).getTime()
                 };
                 programNames[Number(id)] = programName;
                 if (change) {
