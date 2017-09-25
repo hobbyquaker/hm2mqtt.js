@@ -477,7 +477,7 @@ function getVariables() {
                     }
                     let payload = {
                         val: res[id].val,
-                        ts: res[id].ts,
+                        ts: (new Date(res[id].ts)).getTime(),
                         hm: {
                             id: Number(id),
                             UNIT: res[id].unit,
@@ -517,8 +517,8 @@ function getPrograms(cb) {
                     const topic = config.name + '/status/' + programName;
                     let payload = {
                         val: res[id].active,
-                        ts: res[id].ts,
-                        lc: res[id].lc,
+                        ts: (new Date(res[id].ts)).getTime(),
+                        lc: (new Date(res[id].lc)).getTime(),
                         hm: {
                             id: Number(id)
                         }
