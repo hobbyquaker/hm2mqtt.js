@@ -444,6 +444,11 @@ if (config.jsonNameTable) {
         }
     });
 }
+function parseDateISOString(s) {
+    let ds = s.split(/\D/).map(s => parseInt(s));
+    ds[1] = ds[1] - 1; // adjust month
+    return new Date(...ds);
+}
 
 function getVariables() {
     regaJson('variables.fn', (err, res) => {
@@ -462,12 +467,13 @@ function getVariables() {
                     min: res[id].min,
                     max: res[id].max,
                     unit: res[id].unit,
-                    ts: (new Date(res[id].ts)).getTime(),
+                    ts: res[id].ts,
                     type: variableType[res[id].type],
                     enum: res[id].enum ? res[id].enum.split(';') : undefined
                 };
                 variableNames[Number(id)] = varName;
                 if (change) {
+                    let ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
                     const topic = config.name + '/status/' + varName;
                     let enumIndex = res[id].val;
                     if (enumIndex === false) {
@@ -477,7 +483,7 @@ function getVariables() {
                     }
                     let payload = {
                         val: res[id].val,
-                        ts: (new Date(res[id].ts)).getTime(),
+                        ts: ts,
                         hm: {
                             id: Number(id),
                             UNIT: res[id].unit,
@@ -510,15 +516,15 @@ function getPrograms(cb) {
                 programs[programName] = {
                     id: Number(id),
                     active: res[id].active,
-                    ts: (new Date(res[id].ts)).getTime()
+                    ts: res[id].ts
                 };
                 programNames[Number(id)] = programName;
                 if (change) {
+                    let ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
                     const topic = config.name + '/status/' + programName;
                     let payload = {
                         val: res[id].active,
-                        ts: (new Date(res[id].ts)).getTime(),
-                        lc: (new Date(res[id].lc)).getTime(),
+                        ts,
                         hm: {
                             id: Number(id)
                         }
