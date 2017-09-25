@@ -445,8 +445,8 @@ if (config.jsonNameTable) {
     });
 }
 function parseDateISOString(s) {
-    let ds = s.split(/\D/).map(s => parseInt(s));
-    ds[1] = ds[1] - 1; // adjust month
+    const ds = s.split(/\D/).map(s => parseInt(s, 10));
+    ds[1] -= 1;
     return new Date(...ds);
 }
 
@@ -473,7 +473,7 @@ function getVariables() {
                 };
                 variableNames[Number(id)] = varName;
                 if (change) {
-                    let ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
+                    const ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
                     const topic = config.name + '/status/' + varName;
                     let enumIndex = res[id].val;
                     if (enumIndex === false) {
@@ -483,7 +483,7 @@ function getVariables() {
                     }
                     let payload = {
                         val: res[id].val,
-                        ts: ts,
+                        ts,
                         hm: {
                             id: Number(id),
                             UNIT: res[id].unit,
@@ -520,7 +520,7 @@ function getPrograms(cb) {
                 };
                 programNames[Number(id)] = programName;
                 if (change) {
-                    let ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
+                    const ts = res[id].ts ? parseDateISOString(res[id].ts).getTime() : 0;
                     const topic = config.name + '/status/' + programName;
                     let payload = {
                         val: res[id].active,
