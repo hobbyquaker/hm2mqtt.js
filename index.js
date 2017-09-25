@@ -685,7 +685,7 @@ function publishMeta(name) {
         const obj = {
             name: names[address] || address,
             type: dev.PARENT_TYPE ? 'channel' : 'device',
-            'interface': 'homematic',
+            interface: 'homematic',
             native: dev
         };
         obj.native.PARAMSET_DESCRIPTIONS = psDesc;
