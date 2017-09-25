@@ -18,6 +18,8 @@ log.info(pkg.name + ' ' + pkg.version + ' starting');
 
 const rpcClient = {};
 const rpcServer = {};
+const ifaceConnected = {};
+let ifaceAllConnected = false;
 const values = {};
 const changes = {};
 const working = {};
@@ -63,7 +65,7 @@ mqtt.on('connect', () => {
     mqttConnected = true;
 
     log.info('mqtt connected', config.mqttUrl);
-    mqtt.publish(config.name + '/connected', '1', {retain: true});
+    mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: true});
 
     log.info('mqtt subscribe', config.name + '/set/#');
     mqtt.subscribe(config.name + '/set/#');
@@ -564,11 +566,13 @@ function checkInit(iface, protocol) {
     log.debug(iface, 'elapsed since lastevent:', elapsed + 's');
     if (iface === 'hmip' && config.hmipReconnectInterval) {
         if (elapsed >= config.hmipReconnectInterval) {
+            ifaceConnected[iface] = false;
             initIface(iface, protocol);
         }
     } else if (iface === 'cuxd') {
         // TODO cuxd reconnect? ping possible?
     } else if (elapsed >= (config.pingInterval * 2)) {
+        ifaceConnected[iface] = false;
         initIface(iface, protocol);
     } else if (elapsed >= config.pingInterval) {
         log.debug('rpc', iface, '> ping');
@@ -577,6 +581,21 @@ function checkInit(iface, protocol) {
                 log.error(err);
             }
         });
+    }
+    checkIfaceAll();
+}
+
+function checkIfaceAll() {
+    const current = ifaceAllConnected;
+    ifaceAllConnected = true;
+    Object.keys(ifaceConnected).forEach(i => {
+        if (!ifaceConnected[i]) {
+            ifaceAllConnected = false;
+        }
+    });
+    log.debug('ifaceAllConnected', ifaceAllConnected);
+    if (current !== ifaceAllConnected) {
+        mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: true});
     }
 }
 
@@ -623,12 +642,16 @@ function initIface(name, protocol) {
             log.error(err);
         } else {
             log.debug('rpc', name, '< init', JSON.stringify(res));
+            ifaceConnected[name] = true;
+            checkIfaceAll();
         }
         stopIface[name] = cb => {
             const stopParams = [url, ''];
             log.info('rpc', name, '> init', stopParams);
             rpcClient[name].methodCall('init', stopParams, (err, res) => {
                 log.debug('rpc', name, '< init', err, JSON.stringify(res));
+                ifaceConnected[name] = false;
+                checkIfaceAll();
                 cb();
             });
         };
@@ -652,6 +675,22 @@ function createClient(protocol, port) {
 
 function paramsetName(dev) {
     return dev.PARENT_TYPE + '/' + dev.VERSION + '/' + dev.TYPE;
+}
+
+function publishMeta(name) {
+    log.info('publish meta data', name);
+    Object.keys(devices[name]).forEach(address => {
+        const dev = devices[name][address];
+        const psDesc = paramsetDescriptions[paramsetName(dev)];
+        const obj = {
+            name: names[address] || '',
+            type: dev.PARENT_TYPE ? 'channel' : 'device',
+            'interface': 'homematic',
+            native: dev
+        };
+        obj.native.PARAMSET_DESCRIPTIONS = psDesc;
+        mqttPublish('meta/set/' + config.name + '/' + (names[address] || address), obj);
+    });
 }
 
 function createParamsetQueue(name) {
@@ -700,6 +739,9 @@ function getParamset(name) {
         log.info('got', Object.keys(paramsetDescriptions).length, 'paramsetDescriptions');
         log.debug('saving', 'paramsetDescriptions_' + fileName());
         pjson.save('paramsetDescriptions_' + fileName(), paramsetDescriptions);
+        if (config.publishMeta) {
+            publishMeta(name);
+        }
     }
 }
 
