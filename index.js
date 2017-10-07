@@ -281,7 +281,7 @@ function rpcType(payload, paramset) {
         val = payload;
     }
 
-    switch (paramset.TYPE) {
+    switch (paramset && paramset.TYPE) {
         case 'BOOL':
         // eslint-disable-line no-fallthrough
         case 'ACTION':
@@ -321,7 +321,6 @@ function rpcType(payload, paramset) {
             val = String(val);
             break;
         default:
-
     }
 
     return val;
@@ -349,10 +348,9 @@ function rpcSet(name, paramset, datapoint, payload) {
     ps = ps && ps[paramset] && ps[paramset][datapoint];
     if (!ps) {
         log.warn('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramset + '.' + datapoint);
-        return;
     }
 
-    if (!(ps.OPERATIONS & 2)) {
+    if (ps && !(ps.OPERATIONS & 2)) {
         log.error(iface, address, paramset, datapoint, 'not writeable');
         return;
     }
@@ -444,6 +442,7 @@ if (config.jsonNameTable) {
         }
     });
 }
+
 function parseDateISOString(s) {
     const ds = s.split(/\D/).map(s => parseInt(s, 10));
     ds[1] -= 1;
