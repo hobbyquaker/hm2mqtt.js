@@ -26,11 +26,6 @@ I suggest to use [pm2](http://pm2.keymetrics.io/) to manage the hm2mqtt process 
 ...)
 
 
-#### Docker
-
-[Holger Imbery](https://github.com/holgerimbery) created a [Dockerfile for hm2mqtt.js](https://github.com/holgerimbery/docker_hm2mqtt).
-
-
 ### Command Line Options
 
 Use `hm2mqtt --help` to get a list of available options. All options can also be set per environment variable (e.g. 
@@ -83,6 +78,40 @@ start a program publish the string `start`.
 hm2mqtt sends virtual datapoints named `LEVEL_NOTWORKING` respectively `STATE_NOTWORKING` for actuators that have a 
 `WORKING` and/or `DIRECTION` datapoint. The `*_NOTWORKING` datapoints are only updated when `WORKING` is `false` - this 
 is useful for e.g. sliders in a UI to prevent jumping sliders when a Blind or Keymatic is moving or a Dimmer is dimming.
+
+
+## docker image for hm2mqtt.js
+
+#### Usage (architecture: amd64)
+- pull the image to your machine, or if you are on a swarm to each node
+```
+docker pull mqttsmarthome/hm2mqtt:latest
+```
+- start the container with (e.g)
+```
+docker run -d -p 2126:2126 -p 2127:2127 --name hm2mqtt -e HM2MQTT_MQTT-URL="mqtt://xxx.xxx.xxx.xxx" -e HM2MQTT_MQTT-USERNAME="mqtt-user-name" -e HM2MQTT_MQTT-PASSWORD="mqtt-user-password" -e HM2MQTT_CCU-ADDRESS="xxx.xxx.xxx.xxx" -e HM2MQTT_INIT-ADDRESS="xxx.xxx.xxx.xxx" -e HM2MQTT_VERBOSITY="debug" mqttsmarthome/hm2mqtt
+```
+- or the service in your swarm with (e.g)
+```
+docker service create --name hm2mqtt \
+--network ingress \
+--publish 2126:2126 \
+--publish 2127:2127 \
+--env HM2MQTT_MQTT-URL="mqtt://xxx.xxx.xxx.xxx" \
+--env HM2MQTT_MQTT-USERNAME="mqtt-user-name" \
+--env HM2MQTT_MQTT-PASSWORD="mqtt-user-password" \
+--env HM2MQTT_CCU-ADDRESS="xxx.xxx.xxx.xxx" \
+--env HM2MQTT_INIT-ADDRESS="xxx.xxx.xxx.xxx" \
+--env HM2MQTT_VERBOSITY="debug" \
+mqttsmarthome/hm2mqtt
+```
+
+#### Usage (architecture: armhf)
+- pull the image to your machine, or if you are on a swarm to each node
+```
+docker pull mqttsmarthome/hm2mqtt:armhf
+```
+- follow the description above (architecture: amd64), but leave out the pull sequence mentioned there.
 
 
 ## License
