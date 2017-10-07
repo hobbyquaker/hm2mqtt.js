@@ -745,7 +745,7 @@ function getParamset(name) {
         log.info('got', Object.keys(paramsetDescriptions).length, 'paramsetDescriptions');
         log.debug('saving', 'paramsetDescriptions_' + fileName());
         pjson.save('paramsetDescriptions_' + fileName(), paramsetDescriptions);
-        if (config.publishMeta) {
+        if (config.publishMetadata) {
             publishMeta(name);
         }
     }
