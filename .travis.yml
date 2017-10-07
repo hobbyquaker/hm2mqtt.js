@@ -19,12 +19,13 @@ jobs:
       - nvm install 6
       - npm install
       - npm test
+      after_success: skip
     - stage: build docker image
       script:
       - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
       - docker build -f Dockerfile.armhf -t hm2mqtt:armhf .
       - docker images
-      - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo ""; else echo -$TRAVIS_BRANCH ; fi`
+      - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo $(npm view hm2mqtt version); else echo -$TRAVIS_BRANCH ; fi`
       - docker tag hm2mqtt:armhf mqttsmarthome/hm2mqtt:armhf$TAG
     - stage: test docker image
       script:
