@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
   "bin": {
@@ -41,7 +41,7 @@
     "persist-json": "^1.1.0",
     "request": "^2.81.0",
     "yalm": "^4.0.2",
-    "yargs": "^8.0.2"
+    "yargs": "^9.0.1"
   },
   "devDependencies": {
     "camo-purge": "latest",
