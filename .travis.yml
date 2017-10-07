@@ -1,5 +1,10 @@
 sudo: true
 
+before_install:
+  - sudo apt-add-repository ppa:mosquitto-dev/mosquitto-ppa -y
+  - sudo apt-get update -y
+  - sudo apt-get install mosquitto -y
+
 services:
   - docker
 
@@ -9,6 +14,11 @@ before_script:
 
 jobs:
   include:
+    - stage: test
+      script:
+      - nvm install 6
+      - npm install
+      - npm test
     - stage: build docker image
       script:
       - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
