@@ -37,3 +37,4 @@ after_success:
     - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo $(npm view hm2mqtt version); else echo -$TRAVIS_BRANCH ; fi`
     - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
     - docker push mqttsmarthome/hm2mqtt_armhf:$TAG
+    - docker tag hm2mqtt_armhf mqttsmarthome/hm2mqtt_armhf:latest
