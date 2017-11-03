@@ -17,6 +17,7 @@ module.exports = require('yargs')
     .describe('init-address', 'Address used in the RPC init. Normally there is no need to set this')
     .describe('help', 'show help')
     .describe('publish-metadata', '')
+    .describe('mqtt-retain', 'enable/disable retain flag for mqtt messages')
     .alias({
         a: 'ccu-address',
         b: 'binrpc-listen-port',
@@ -34,6 +35,7 @@ module.exports = require('yargs')
         u: 'mqtt-username',
         v: 'verbosity'
     })
+    .boolean('mqtt-retain')
     .default({
         'disable-rega': false,
         'mqtt-url': 'mqtt://127.0.0.1',
@@ -46,7 +48,8 @@ module.exports = require('yargs')
         'hmip-reconnect-interval': 600,
         'rega-poll-interval': 0,
         'rega-poll-trigger': '',
-        'publish-metadata': false
+        'publish-metadata': false,
+        'mqtt-retain': true
     })
     .demandOption([
         'ccu-address'
