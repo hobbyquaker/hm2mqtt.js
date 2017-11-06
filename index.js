@@ -56,7 +56,7 @@ log.info('mqtt trying to connect', config.mqttUrl);
 
 const mqtt = Mqtt.connect(config.mqttUrl, {
     clientId: config.name + '_' + Math.random().toString(16).substr(2, 8),
-    will: {topic: config.name + '/connected', payload: '0', retain: true},
+    will: {topic: config.name + '/connected', payload: '0', retain: (config.mqttRetain)},
     username: config.mqttUsername,
     password: config.mqttPassword
 });
@@ -65,7 +65,7 @@ mqtt.on('connect', () => {
     mqttConnected = true;
 
     log.info('mqtt connected', config.mqttUrl);
-    mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: true});
+    mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: (config.mqttRetain)});
 
     log.info('mqtt subscribe', config.name + '/set/#');
     mqtt.subscribe(config.name + '/set/#');
@@ -492,7 +492,7 @@ function getVariables() {
                         }
                     };
                     payload = JSON.stringify(payload);
-                    mqttPublish(topic, payload, {retain: true});
+                    mqttPublish(topic, payload, {retain: (config.mqttRetain)});
                 }
             });
             log.debug('rega got', Object.keys(variables).length, 'variables');
@@ -529,7 +529,7 @@ function getPrograms(cb) {
                         }
                     };
                     payload = JSON.stringify(payload);
-                    mqttPublish(topic, payload, {retain: true});
+                    mqttPublish(topic, payload, {retain: (config.mqttRetain)});
                 }
             });
             log.debug('rega got', Object.keys(programs).length, 'programs');
@@ -600,7 +600,7 @@ function checkIfaceAll() {
     });
     log.debug('ifaceAllConnected', ifaceAllConnected);
     if (current !== ifaceAllConnected) {
-        mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: true});
+        mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: (config.mqttRetain)});
     }
 }
 
@@ -846,7 +846,7 @@ const rpcMethods = {
         }
         payload = JSON.stringify(payload);
 
-        const retain = ps.TYPE !== 'ACTION';
+        const retain = (config.mqttRetain) && (ps.TYPE !== 'ACTION');
 
         mqttPublish(topic, payload, {retain});
 
