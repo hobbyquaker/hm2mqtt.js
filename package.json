@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "2.2.4",
+  "version": "2.3.0",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
   "bin": {
@@ -26,7 +26,8 @@
   ],
   "author": "Sebastian Raff <hq@ccu.io> (https://hobbyquaker.github.io)",
   "contributors": [
-    "RF77 (https://github.com/RF77)"
+    "RF77 (https://github.com/RF77)",
+    "Simon Christmann (https://github.com/dersimn)"
   ],
   "license": "MIT",
   "bugs": {
