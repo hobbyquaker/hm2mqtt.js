@@ -825,11 +825,14 @@ const rpcMethods = {
             return;
         }
         let ps = paramsetDescriptions[paramsetName(dev)];
-        ps = (ps && ps.VALUES && ps.VALUES[params[2]]);
         if (!ps) {
             log.error('unknown paramsetDescription', paramsetName(dev));
-            ps = {};
+        } else if (!ps.VALUES) {
+            log.error('missing VALUES in paramsetDescription', paramsetName(dev));
+        } else if (!ps.VALUES[params[2]]) {
+            log.error('missing VALUE', params[2], 'in paramsetDescription', paramsetName(dev));
         }
+        ps = (ps && ps.VALUES && ps.VALUES[params[2]]) || {};
 
         const topic = config.name + '/status/' + (names[params[1]] || params[1]) + '/' + params[2];
 
