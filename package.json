@@ -8,8 +8,8 @@
   },
   "preferGlobal": true,
   "scripts": {
-    "test": "camo-purge ; xo && nyc mocha test.js && nyc report --reporter=text-lcov | coveralls --force",
-    "testonly": "mocha test.js",
+    "test": "camo-purge ; xo && nyc mocha --exit test.js && nyc report --reporter=text-lcov | coveralls --force",
+    "testonly": "mocha --exit test.js",
     "lint": "xo",
     "lintfix": "xo --fix"
   },
