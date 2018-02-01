@@ -8,10 +8,10 @@
   },
   "preferGlobal": true,
   "scripts": {
-    "test": "camo-purge ; xo --space 4 --ignore test.js && nyc mocha test.js && nyc report --reporter=text-lcov | coveralls --force",
+    "test": "camo-purge ; xo && nyc mocha test.js && nyc report --reporter=text-lcov | coveralls --force",
     "testonly": "mocha test.js",
-    "lint": "xo --space 4 --ignore test.js",
-    "lintfix": "xo --space 4 --ignore test.js --fix"
+    "lint": "xo",
+    "lintfix": "xo --fix"
   },
   "repository": {
     "type": "git",
@@ -59,5 +59,11 @@
   },
   "yargs": {
     "boolean-negation": false
+  },
+  "xo": {
+    "space": 4,
+    "ignore": [
+      "test.js"
+    ]
   }
 }
