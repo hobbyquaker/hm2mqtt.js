@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Interface between Homematic and MQTT",
   "main": "index.js",
   "bin": {
@@ -24,7 +24,7 @@
     "bidcos",
     "eq-3"
   ],
-  "author": "Sebastian Raff <hq@ccu.io> (https://hobbyquaker.github.io)",
+  "author": "Sebastian Raff <hobbyquaker@gmail.com> (https://hobbyquaker.github.io)",
   "contributors": [
     "RF77 (https://github.com/RF77)",
     "Simon Christmann (https://github.com/dersimn)"
@@ -35,14 +35,14 @@
   },
   "homepage": "https://github.com/hobbyquaker/hm2mqtt.js",
   "dependencies": {
-    "async": "^2.5.0",
-    "binrpc": "^3.1.0",
+    "async": "^2.6.0",
+    "binrpc": "^3.1.1",
     "homematic-xmlrpc": "^1.0.2",
-    "mqtt": "^2.11.0",
-    "persist-json": "^1.1.0",
-    "request": "^2.81.0",
-    "yalm": "^4.0.2",
-    "yargs": "^9.0.1"
+    "mqtt": "^2.15.1",
+    "persist-json": "^1.2.0",
+    "request": "^2.83.0",
+    "yalm": "^4.1.0",
+    "yargs": "^11.0.0"
   },
   "devDependencies": {
     "camo-purge": "latest",
