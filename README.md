@@ -38,9 +38,13 @@ setting `HM2MQTT_VERBOSITY=debug` has the same effect as using `--verbosity debu
 [mqtt-smarthome payload format](https://github.com/mqtt-smarthome/mqtt-smarthome/blob/master/Architecture.md))
 * Values can be set via `<name>/set/<channelAddress_or_channelName>/<datapoint>` (can be plain or JSON payload). Example:
 `hmip/set/Light_Garage/STATE`,
-* Values from Paramsets other than `VALUES` can be set via 
-`<name>/paramset/<channelAddress_or_channelName>/<paramset>/<datapoint>`.
-* RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` 
+* Single values from arbitrary Paramsets can be set via 
+`<name>/param/<channelAddress_or_channelName>/<paramset>/<datapoint>`. Example topic for setting the Mode of an 1st gen
+Thermostat HM-CC-TC: `hm/param/Temperatur Hobbyraum Soll/MASTER/MODE_TEMPERATUR_REGULATOR`
+* Multiple values at once in arbitrary Paramsets can be set via `
+``<name>/param/<channelAddress_or_channelName>/<paramset>`. The payload has to be a JSON object like e.g. 
+`{"MODE_TEMPERATURE_REGULATOR":2,"TEMPERATUR_COMFORT_VALUE":24}`.
+* Arbitrary RPC methods can be called via `<name>/rpc/<iface>/<command>/<callId>` and respond to `<name>/response/<callId>` 
 (JSON encoded Array as payload). The callId can be an arbitrary string, its purpose is just to collate the response
 to the command. iface can be one of `hmip`, `rfd` or `hs485d`.
 

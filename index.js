@@ -70,6 +70,9 @@ mqtt.on('connect', () => {
     log.info('mqtt subscribe', config.name + '/set/#');
     mqtt.subscribe(config.name + '/set/#');
 
+    log.info('mqtt subscribe', config.name + '/param/#');
+    mqtt.subscribe(config.name + '/param/#');
+
     log.info('mqtt subscribe', config.name + '/paramset/#');
     mqtt.subscribe(config.name + '/paramset/#');
 
@@ -132,12 +135,17 @@ mqtt.on('message', (topic, payload) => {
         const channel = parts.slice(2, parts.length - 1).join('/');
         const datapoint = parts[parts.length - 1];
         rpcSet(channel, 'VALUES', datapoint, payload);
-    } else if (parts.length >= 5 && parts[1] === 'paramset') {
-        // Topic <name>/paramset/<channel>/<paramset>/<datapoint>
+    } else if (parts.length >= 5 && parts[1] === 'param') {
+        // Topic <name>/param/<channel>/<paramset>/<datapoint>
         const channel = parts.slice(2, parts.length - 2).join('/');
         const paramset = parts[parts.length - 2];
         const datapoint = parts[parts.length - 1];
-        rpcSet(channel, paramset, datapoint, payload);
+        rpcPutParam(channel, paramset, datapoint, payload);
+    } else if (parts.length >= 4 && parts[1] === 'paramset') {
+        // Topic <name>/paramset/<channel>/<paramset>
+        const channel = parts.slice(2, parts.length - 1).join('/');
+        const paramset = parts[parts.length - 1];
+        rpcPutParamset(channel, paramset, payload);
     } else if (parts.length === 5 && parts[1] === 'rpc') {
         // Topic <name>/rpc/<interface>/<command>/<call_id> - Answer: <name>/response/<call_id>
         const [, , iface, command, callid] = parts;
@@ -334,6 +342,80 @@ function findIface(address) {
         }
     });
     return iface;
+}
+
+function rpcPutParam(name, paramsetKey, datapoint, payload) {
+    const address = addresses[name] || name;
+    const iface = findIface(address);
+    if (!iface) {
+        log.error('unknown device', address);
+        return;
+    }
+    const psName = paramsetName(devices[iface][address]);
+    let ps = paramsetDescriptions[psName];
+    ps = ps && ps[paramsetKey] && ps[paramsetKey][datapoint];
+    if (!ps) {
+        log.warn('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramsetKey + '.' + datapoint);
+    }
+
+    if (ps && !(ps.OPERATIONS & 2)) {
+        log.error(iface, address, paramsetKey, datapoint, 'not writeable');
+        return;
+    }
+
+    const val = rpcType(payload, ps);
+
+    const paramset = {};
+    paramset[datapoint] = val;
+    log.debug('rpc', iface, '> putParamset', [address, paramsetKey, paramset]);
+
+    rpcClient[iface].methodCall('putParamset', [address, paramsetKey, paramset], err => {
+        if (err) {
+            log.error(err);
+        }
+    });
+}
+
+function rpcPutParamset(name, paramsetKey, payload) {
+    const address = addresses[name] || name;
+    const iface = findIface(address);
+    if (!iface) {
+        log.error('unknown device', address);
+        return;
+    }
+    const psName = paramsetName(devices[iface][address]);
+    let ps = paramsetDescriptions[psName];
+    ps = ps && ps[paramsetKey];
+    if (!ps) {
+        log.warn('unknown paramset', paramsetName(devices[iface][address]) + '.' + paramsetKey);
+    }
+
+    const paramset = {};
+
+    try {
+        payload = JSON.parse(payload);
+        if (typeof payload !== 'object') {
+            throw new TypeError('invalid payload type', typeof payload);
+        }
+        Object.keys(payload).forEach(datapoint => {
+            if (ps[datapoint] && !(ps[datapoint].OPERATIONS & 2)) {
+                log.error(iface, address, paramsetKey, datapoint, 'not writeable');
+                return;
+            }
+            paramset[datapoint] = rpcType(String(payload[datapoint]), ps[datapoint]);
+        });
+    } catch (err) {
+        log.error(err);
+        return;
+    }
+
+    log.debug('rpc', iface, '> putParamset', [address, paramsetKey, paramset]);
+
+    rpcClient[iface].methodCall('putParamset', [address, paramsetKey, paramset], err => {
+        if (err) {
+            log.error(err);
+        }
+    });
 }
 
 function rpcSet(name, paramset, datapoint, payload) {
