@@ -18,7 +18,7 @@ const simSubscriptions = {};
 const simBuffer = [];
 
 const hmCmd = path.join(__dirname, '/index.js');
-const hmArgs = ['-m mqtt://127.0.0.1:1883', '--ccu-address', '127.0.0.1', '-v', 'debug'];
+const hmArgs = ['--mqtt-url', 'mqtt://127.0.0.1:1883', '--ccu-address', '127.0.0.1', '-v', 'debug'];
 let hm;
 let hmPipeOut;
 let hmPipeErr;
