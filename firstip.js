@@ -11,6 +11,6 @@ Object.keys(interfaces).forEach(i => {
     });
 });
 
-const firstAddress = addresses;
+const [firstAddress] = addresses;
 
 module.exports = firstAddress;
