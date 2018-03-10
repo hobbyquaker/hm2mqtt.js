@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* eslint-disable prefer-destructuring */
+
 const fs = require('fs');
 const path = require('path');
 const pjson = require('persist-json')('hm2mqtt');
