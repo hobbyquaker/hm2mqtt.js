@@ -56,9 +56,7 @@ log.info('mqtt trying to connect', config.mqttUrl);
 
 const mqtt = Mqtt.connect(config.mqttUrl, {
     clientId: config.name + '_' + Math.random().toString(16).substr(2, 8),
-    will: {topic: config.name + '/connected', payload: '0', retain: (config.mqttRetain)},
-    username: config.mqttUsername,
-    password: config.mqttPassword
+    will: {topic: config.name + '/connected', payload: '0', retain: (config.mqttRetain)}
 });
 
 mqtt.on('connect', () => {

@@ -103,8 +103,6 @@ docker service create --name hm2mqtt \
 --publish 2126:2126 \
 --publish 2127:2127 \
 --env HM2MQTT_MQTT-URL="mqtt://xxx.xxx.xxx.xxx" \
---env HM2MQTT_MQTT-USERNAME="mqtt-user-name" \
---env HM2MQTT_MQTT-PASSWORD="mqtt-user-password" \
 --env HM2MQTT_CCU-ADDRESS="xxx.xxx.xxx.xxx" \
 --env HM2MQTT_INIT-ADDRESS="xxx.xxx.xxx.xxx" \
 --env HM2MQTT_VERBOSITY="debug" \
