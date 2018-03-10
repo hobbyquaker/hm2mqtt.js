@@ -16,6 +16,8 @@ module.exports = require('yargs')
     .describe('help', 'show help')
     .describe('publish-metadata', '')
     .describe('mqtt-retain', 'enable/disable retain flag for mqtt messages')
+    .describe('insecure', 'allow tls connections with invalid certificates')
+    .boolean('insecure')
     .alias({
         a: 'ccu-address',
         b: 'binrpc-listen-port',
@@ -26,11 +28,9 @@ module.exports = require('yargs')
         l: 'listen-port',
         m: 'mqtt-url',
         n: 'name',
-        p: 'mqtt-password',
         q: 'hmip-reconnect-interval',
         r: 'listen-address',
         s: 'init-address',
-        u: 'mqtt-username',
         v: 'verbosity'
     })
     .boolean('mqtt-retain')
