@@ -696,6 +696,11 @@ function createIface(name, protocol, port) {
     }
     rpcClient[name] = createClient(protocol, port);
     initIface(name, protocol, port);
+    if (config.dutyCyclePollInterval && (name === 'hmip' || name === 'rfd')) {
+        setInterval(() => {
+            pollDutyCylce(name);
+        }, config.dutyCyclePollInterval * 1000);
+    }
 }
 
 const stopIface = {};
@@ -1059,4 +1064,21 @@ function createServer(protocol) {
         server.on(method, rpcMethods[method]);
     });
     return server;
+}
+
+function pollDutyCylce(iface) {
+    rpcClient[iface].methodCall('listBidcosInterfaces', [], (err, res) => {
+        if (err) {
+            log.error(err);
+        } else if (res && res.forEach) {
+            res.forEach(data => {
+                const topic = config.name + '/status/' + data.ADDRESS + '/DUTY_CYCLE';
+                const payload = {
+                    val: data.DUTY_CYCLE,
+                    ts: (new Date()).getTime()
+                };
+                mqttPublish(topic, payload, {retain: (config.mqttRetain)});
+            });
+        }
+    });
 }
