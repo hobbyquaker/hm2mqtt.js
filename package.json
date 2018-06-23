@@ -35,12 +35,12 @@
   },
   "homepage": "https://github.com/hobbyquaker/hm2mqtt.js",
   "dependencies": {
-    "async": "^2.6.0",
-    "binrpc": "^3.1.2",
+    "async": "^2.6.1",
+    "binrpc": "^3.2.1",
     "homematic-xmlrpc": "^1.0.2",
-    "mqtt": "^2.16.0",
+    "mqtt": "^2.18.1",
     "persist-json": "^1.2.0",
-    "request": "^2.83.0",
+    "request": "^2.87.0",
     "yalm": "^4.1.0",
     "yargs": "^11.0.0"
   },
