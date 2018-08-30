@@ -2,13 +2,15 @@
 
 [![mqtt-smarthome](https://img.shields.io/badge/mqtt-smarthome-blue.svg)](https://github.com/mqtt-smarthome/mqtt-smarthome)
 [![NPM version](https://badge.fury.io/js/hm2mqtt.svg)](http://badge.fury.io/js/hm2mqtt)
-[![Dependency Status](https://img.shields.io/gemnasium/hobbyquaker/hm2mqtt.js.svg?maxAge=2592000)](https://gemnasium.com/github.com/hobbyquaker/hm2mqtt.js)
+[![dependencies Status](https://david-dm.org/hobbyquaker/hm2mqtt.js/status.svg)](https://david-dm.org/hobbyquaker/hm2mqtt.js)
 [![Build Status](https://travis-ci.org/hobbyquaker/hm2mqtt.js.svg?branch=master)](https://travis-ci.org/hobbyquaker/hm2mqtt.js)
 [![Coverage Status](https://coveralls.io/repos/github/hobbyquaker/hm2mqtt.js/badge.svg?branch=master)](https://coveralls.io/github/hobbyquaker/hm2mqtt.js?branch=master)
 [![XO code style](https://img.shields.io/badge/code_style-XO-5ed9c7.svg)](https://github.com/sindresorhus/xo)
 [![License][mit-badge]][mit-url]
 
 > Node.js based Interface between Homematic and MQTT
+
+# UNMAINTAINED - I gave up working on this project in favor of [node-red-contrib-ccu](https://github.com/hobbyquaker/node-red-contrib-ccu) respectively the CCU3/RaspberryMatic Addon [RedMatic](https://github.com/hobbyquaker/RedMatic) that includes node-red-contrib-ccu. The functionality of hm2mqtt.js will be implemented in node-red-contrib-ccu so this can act as a 1:1 drop-in-replacement.
 
 Because [hm2mqtt](https://github.com/owagner/hm2mqtt) isn't developed anymore and I don't really like Java I decided to 
 re-implement this with Node.js
