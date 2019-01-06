@@ -5,7 +5,10 @@ module.exports = require('yargs')
     .usage(pkg.name + ' ' + pkg.version + '\n' + pkg.description + '\n\nUsage: $0 [options]')
     .describe('verbosity', 'possible values: "error", "warn", "info", "debug"')
     .describe('name', 'instance name. used as mqtt client id and as prefix for connected topic')
-    .describe('mqtt-url', 'mqtt broker url. See https://github.com/mqttjs/MQTT.js#connect-using-a-url')
+    .describe('mqtt-url', 'mqtt broker url. May contain user/password and port')
+    .describe('k', 'set path for client key')
+    .describe('c', 'set path for client certificate')
+    .describe('t', 'set path for trusted certification authority')
     .describe('ping-interval', 'Send a Ping if no event occured in the last interval. Re-Init on next interval')
     .describe('disable-rega', 'Don\'t sync names from ReGa')
     .describe('json-name-table', 'A JSON file that maps device and channel addresses to names')
@@ -23,8 +26,10 @@ module.exports = require('yargs')
     .alias({
         a: 'ccu-address',
         b: 'binrpc-listen-port',
+        c: 'clientCert',
         d: 'disable-rega',
         h: 'help',
+        k: 'clientKey',
         i: 'ping-interval',
         j: 'json-name-table',
         l: 'listen-port',
@@ -33,6 +38,7 @@ module.exports = require('yargs')
         q: 'hmip-reconnect-interval',
         r: 'listen-address',
         s: 'init-address',
+        t: 'trustedCa',
         v: 'verbosity'
     })
     .boolean('mqtt-retain')
