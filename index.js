@@ -110,7 +110,7 @@ const mqtt = Mqtt.connect(mqttOptions);
 mqtt.on('connect', () => {
     mqttConnected = true;
 
-    log.info('mqtt connected', config.mqttUrl);
+    log.info('mqtt connected', mqttOptions['host']);
     mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: (config.mqttRetain)});
 
     log.info('mqtt subscribe', config.name + '/set/#');
@@ -135,7 +135,7 @@ mqtt.on('connect', () => {
 mqtt.on('close', () => {
     if (mqttConnected) {
         mqttConnected = false;
-        log.error('mqtt closed ' + config.mqttUrl);
+        log.error('mqtt closed ' + mqttOptions['host']);
     }
 });
 
