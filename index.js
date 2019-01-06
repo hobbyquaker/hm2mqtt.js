@@ -14,6 +14,7 @@ const binrpc = require('binrpc');
 const discover = require('./discover.js');
 const pkg = require('./package.json');
 const config = require('./config.js');
+const UrlPattern = require('url-pattern');
 
 log.setLevel(config.verbosity);
 log.info(pkg.name + ' ' + pkg.version + ' starting');
@@ -28,6 +29,7 @@ const working = {};
 const workingTimeout = {};
 let names = {};
 const addresses = {};
+
 function reverseNames() {
     Object.keys(names).forEach(address => {
         addresses[names[address]] = address;
@@ -54,18 +56,61 @@ const variableType = {
 
 let mqttConnected;
 
-log.info('mqtt trying to connect', config.mqttUrl);
+const pattern = new UrlPattern(
+    '(:protocol\\://:url)' +
+    '(:protocol\\://:url\\::port)' +
+    '(:protocol\\://:username\\::password\\@:url)' +
+    '(:protocol\\://:username\\::password\\@:url\\::port)' +
+    '(:protocol\\://:username\\::password\\@:ip.:ip.:ip.:ip)' +
+    '(:protocol\\://:username\\::password\\@:ip.:ip.:ip.:ip\\::port)' +
+    '(:protocol\\://:ip.:ip.:ip.:ip)' +
+    '(:protocol\\://:ip.:ip.:ip.:ip\\::port)');
 
-const mqtt = Mqtt.connect(config.mqttUrl, {
-    clientId: config.name + '_' + Math.random().toString(16).substr(2, 8),
-    will: {topic: config.name + '/connected', payload: '0', retain: (config.mqttRetain)},
-    rejectUnauthorized: !config.insecure
-});
+const brokerData = pattern.match(config.mqttUrl);
+
+let mqttOptions = {};
+
+mqttOptions['host'] = brokerData.url || brokerData.ip[0] + '.' + brokerData.ip[1] + '.' + brokerData.ip[2] + '.' + brokerData.ip[3];
+mqttOptions['protocol'] = brokerData.protocol || 'mqtt';
+
+if (!(brokerData.port)) {
+    if (mqttOptions['protocol'] === 'mqtt') {
+        mqttOptions['port'] = 1883;
+    }
+    else if (mqttOptions['protocol'] === 'mqtts') {
+        mqttOptions['port'] = 8883;
+    }
+} else {
+    mqttOptions['port'] = brokerData.port;
+}
+
+if (brokerData.username && brokerData.password) {
+    mqttOptions['username'] = brokerData.username;
+    mqttOptions['password'] = brokerData.password;
+}
+
+if (config.trustedCa) {
+    mqttOptions['ca'] = fs.readFileSync(config.trustedCa);
+    mqttOptions['rejectUnauthorized'] = !config.insecure;
+}
+
+if (config.clientKey && config.clientCert && config.trustedCa) {
+    mqttOptions['key'] = fs.readFileSync(config.clientKey);
+    mqttOptions['cert'] = fs.readFileSync(config.clientCert);
+}
+
+mqttOptions['clientId'] = config.name + '_' + Math.random().toString(16).substr(2, 8);
+mqttOptions['will'] = {topic: config.name + '/connected', payload: '0', retain: true};
+
+log.debug(mqttOptions);
+log.info('mqtt trying to connect', mqttOptions['host']);
+
+const mqtt = Mqtt.connect(mqttOptions);
 
 mqtt.on('connect', () => {
     mqttConnected = true;
 
-    log.info('mqtt connected', config.mqttUrl);
+    log.info('mqtt connected', mqttOptions['host']);
     mqtt.publish(config.name + '/connected', ifaceAllConnected ? '2' : '1', {retain: (config.mqttRetain)});
 
     log.info('mqtt subscribe', config.name + '/set/#');
@@ -90,7 +135,7 @@ mqtt.on('connect', () => {
 mqtt.on('close', () => {
     if (mqttConnected) {
         mqttConnected = false;
-        log.error('mqtt closed ' + config.mqttUrl);
+        log.error('mqtt closed ' + mqttOptions['host']);
     }
 });
 
@@ -710,6 +755,7 @@ function createIface(name, protocol, port) {
 }
 
 const stopIface = {};
+
 function stop() {
     const cmdQueue = [];
     Object.keys(stopIface).forEach(iface => {
@@ -1092,6 +1138,7 @@ function pollDutyCylce(iface) {
 }
 
 const counters = {};
+
 function publishCounter(topic) {
     if (!config.publishCounters) {
         return;
