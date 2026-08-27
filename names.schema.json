@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hm2mqtt device and channel names",
+  "description": "Maps device and channel addresses (e.g. OEQ1234567:1) to the names used in topics; overrides the ReGa names.",
+  "type": "object",
+  "additionalProperties": {"type": "string", "minLength": 1},
+  "propertyNames": {"pattern": "^[A-Za-z0-9-]+(:[0-9]+)?$"}
+}
