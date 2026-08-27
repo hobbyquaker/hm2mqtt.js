@@ -1,5 +1,3 @@
-import os from 'node:os';
-import path from 'node:path';
 import {parseConfig} from 'mqtt-interfaces-core';
 import pkg from './package.json' with {type: 'json'};
 import {DEFAULT_INTERFACES, INTERFACE_NAMES} from './lib/interfaces.js';
@@ -80,7 +78,7 @@ export const OPTIONS = {
         type: 'string',
         describe:
             'directory for devices, paramset descriptions, names and last values (default: $STATE_DIRECTORY or ~/.hm2mqtt)',
-        default: process.env.STATE_DIRECTORY || path.join(os.homedir(), '.hm2mqtt'),
+        default: process.env.STATE_DIRECTORY,
     },
 };
 

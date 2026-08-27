@@ -68,6 +68,8 @@ function firstIp() {
  * state
  */
 
+// the option's default is $STATE_DIRECTORY only, so --install does not freeze this fallback into the env file
+config.stateDir = config.stateDir || path.join(os.homedir(), '.hm2mqtt');
 fs.mkdirSync(config.stateDir, {recursive: true});
 
 let nameFile = {};
