@@ -14,7 +14,7 @@ Decisions specific to this repo are **H-n**, core gaps continue the core numberi
 roadmap in the `mqtt-interfaces` umbrella repo was not reachable while writing this; D-n references
 follow the core README/ROADMAP wording.
 
-**Status 2026-08-27 (evening): 3.0.0-dev implemented (§7 steps 1–10), 41 unit tests + 7 e2e scenarios with hm-simulator green; verified read-only against the real CCU (ReGa, RPC reads). Not yet done: the parallel run and cutover of §9 — the CCU cannot call back a host outside its LAN (see §12), so the event path is verified with the simulator only until hm2mqtt runs on the home server. No release tagged.**
+**Status 2026-08-27 (night): 3.0.0 prepared (CHANGELOG, README, version 3.0.0 on master) and running as `hm2mqtt@hm3` in parallel to the flow; the `v3.0.0` tag follows the compare after a day of traffic (§9). HA discovery (§13) postponed: the user does not run Home Assistant and feezal recognises hm topics without it (OQ-47 → not now, OQ-53 moot).**
 
 Contents: 1 the contract (what the flow does today) · 2 what 2.5 and node-red-contrib-ccu
 contribute · 3 decisions · 4 topics (Node-RED → 3.0, 2.5 → 3.0) · 5 CLI/env · 6 prerequisites in

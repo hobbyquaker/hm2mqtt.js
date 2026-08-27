@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "3.0.0-dev.0",
+  "version": "3.0.0",
   "description": "Interface between Homematic CCU and MQTT",
   "type": "module",
   "main": "index.js",

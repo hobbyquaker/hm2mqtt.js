@@ -35,8 +35,16 @@ state directory; broker credentials can live in the shared `/etc/mqtt-interfaces
 `--uninstall -n hm` removes the instance. `--config-schema` prints a JSON schema of all options
 (management UIs like [she](https://github.com/hobbyquaker/she) build their config forms from it).
 
-Docker: `docker run --network host -v hm2mqtt:/data -e HM2MQTT_CCU_ADDRESS=... -e HM2MQTT_MQTT_URL=... hobbyquaker/hm2mqtt`
-(host networking, or publish 2126/2127 and set `HM2MQTT_INIT_ADDRESS` to the docker host).
+Docker (build from the Dockerfile — no published image yet):
+
+```
+docker build -t hm2mqtt .
+docker run -d --name hm2mqtt --network host -v hm2mqtt:/data \
+  -e HM2MQTT_CCU_ADDRESS=homematic-ccu3 -e HM2MQTT_MQTT_URL=mqtt://broker hm2mqtt
+```
+
+Host networking, or publish 2126/2127 and set `HM2MQTT_INIT_ADDRESS` to the docker host's address
+so the CCU can call back. `--restart unless-stopped` brings it back after `maintenance/set/restart`.
 
 ## Options
 
