@@ -14,7 +14,7 @@ Decisions specific to this repo are **H-n**, core gaps continue the core numberi
 roadmap in the `mqtt-interfaces` umbrella repo was not reachable while writing this; D-n references
 follow the core README/ROADMAP wording.
 
-**Status 2026-08-27 (night): 3.0.0 prepared (CHANGELOG, README, version 3.0.0 on master) and running as `hm2mqtt@hm3` in parallel to the flow; the `v3.0.0` tag follows the compare after a day of traffic (§9). HA discovery (§13) postponed: the user does not run Home Assistant and feezal recognises hm topics without it (OQ-47 → not now, OQ-53 moot).**
+**Status 2026-08-27 (night): 3.0.0 released (npm + GitHub release, tag `v3.0.0` = 57ab565) and running as `hm2mqtt@hm3` in parallel to the flow; the cutover to `-n hm` (§9) is the user's call after the compare. HA discovery (§13) postponed: the user does not run Home Assistant and feezal recognises hm topics without it (OQ-47 → not now, OQ-53 moot). Release lesson: npm 12 (installed by the release job) refuses remote tarball dependencies — hm-simulator's homematic-xmlrpc 1.x is overridden to 2.0.0.**
 
 Contents: 1 the contract (what the flow does today) · 2 what 2.5 and node-red-contrib-ccu
 contribute · 3 decisions · 4 topics (Node-RED → 3.0, 2.5 → 3.0) · 5 CLI/env · 6 prerequisites in
