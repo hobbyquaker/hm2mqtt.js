@@ -480,5 +480,11 @@ What was built, in order, and what the live runs taught:
   lacked device/datapoint fields → now held until the devices are known. Test checkout left at
   `~/hm2mqtt-test` on the host (state dir `state/`, `run*.log`, `compare*.txt`); retained `hm3/#`
   test topics cleared afterwards.
+- **Parallel run started 2026-08-27 ~18:00**: `deploy.sh mqtt-ifaces` + `sudo hm2mqtt --install -n hm3
+-a homematic-ccu3 -u mqtt://mqtt.lan.raff.rocks` → `hm2mqtt@hm3.service` (state
+  `/var/lib/hm2mqtt/hm3/`, config `/etc/hm2mqtt/hm3.env`). Node-RED keeps `hm/…` untouched. Next:
+  `node ~/hm2mqtt-test/scripts/compare-trees.js mqtt://mqtt.lan.raff.rocks hm hm3 3600` after a day;
+  the installer froze the option defaults into the env file (fine, but `--state-dir` had to lose
+  its `~/.hm2mqtt` default for that reason — resolved at runtime now).
 - Next: `npm run deploy <home-server>` (or `npm install -g` there), `--install -n hm3` for the
   parallel run, `scripts/compare-trees.js mqtts://… hm hm3 3600 --ca …`, then the cutover of §9.
