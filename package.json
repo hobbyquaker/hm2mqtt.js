@@ -14,7 +14,8 @@
     "lib/",
     "paramsets.json",
     "example-names.json",
-    "names.schema.json"
+    "names.schema.json",
+    "scripts/"
   ],
   "engines": {
     "node": "^20.19 || ^22.12 || >=24"

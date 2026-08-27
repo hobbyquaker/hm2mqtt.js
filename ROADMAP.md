@@ -14,7 +14,7 @@ Decisions specific to this repo are **H-n**, core gaps continue the core numberi
 roadmap in the `mqtt-interfaces` umbrella repo was not reachable while writing this; D-n references
 follow the core README/ROADMAP wording.
 
-**Status 2026-08-27: planning; the prerequisites of §6 (core 0.7.0, homematic-rega 2.0.0, homematic-xmlrpc 2.0.0) are done and tagged, hm2mqtt itself is not started.**
+**Status 2026-08-27 (evening): 3.0.0-dev implemented (§7 steps 1–10), 41 unit tests + 7 e2e scenarios with hm-simulator green; verified read-only against the real CCU (ReGa, RPC reads). Not yet done: the parallel run and cutover of §9 — the CCU cannot call back a host outside its LAN (see §12), so the event path is verified with the simulator only until hm2mqtt runs on the home server. No release tagged.**
 
 Contents: 1 the contract (what the flow does today) · 2 what 2.5 and node-red-contrib-ccu
 contribute · 3 decisions · 4 topics (Node-RED → 3.0, 2.5 → 3.0) · 5 CLI/env · 6 prerequisites in
@@ -163,6 +163,9 @@ The reference implementation; the Homematic half of 3.0 is a port of it minus No
 | H-15 | **Home Assistant discovery is not part of 3.0.0** — `discovery()` returns nothing, `--ha-discovery` exists (core) but announces no devices. 3.1 adds channel-type → entity mapping (§10). D-5 (on by default) is honoured as soon as there is something to announce.                                                                                                                                                                                                                                                                                                                                                                                     |
 | H-16 | **Logging per fleet rules**: `rpc <`/`rpc >` per interface and `rega <`/`rega >` at `debug`; an interface that stops answering or a ping timeout is `warn` once (recovery `info`); unknown paramset descriptions `debug` (they are fetched); a rejected `set` is `warn` with topic, payload and reason (core); `error` only for bad config (no CCU address, port bind failure).                                                                                                                                                                                                                                                                          |
 | H-17 | **Client id**: core scheme `<prefix><name>_<random>`; use `--mqtt-client-id-prefix homematic-ccu3_` if a broker ACL is bound to the old id `homematic-ccu3` (OQ-50). TLS with own CA via `--mqtt-tls-ca` (or the shared `MQTT_TLS_CA` in `/etc/mqtt-interfaces/broker.env`).                                                                                                                                                                                                                                                                                                                                                                             |
+| H-18 | **Variables and programs are published at start**, not only on change (the flow's `cache: false` suppressed the first poll): they are few and retained, and a fresh broker gets them without waiting for a change. Datapoints stay opt-in (H-11).                                                                                                                                                                                                                                                                                                                                                                                                        |
+| H-19 | **`datapointEnum`/`valueEnum` come from `VALUE_LIST`** (node-red-contrib-ccu read `description.ENUM`, which the interface processes never send, so both were always undefined there) and `datapointUnit` is added (OQ-51 → yes; `°C` repaired from the lone latin1 byte). Additive: no consumer could depend on undefined fields.                                                                                                                                                                                                                                                                                                                        |
+| H-20 | **Robustness rules learnt on the first live run**: the CCU host is resolved once at start and retried until it resolves (parallel lookups of the same name failed intermittently on macOS); every RPC call has a 30 s timeout (rfd's `init` blocks until it has called us back — with no route it hung forever); state is saved _before_ the de-init at shutdown (the core's 2 s budget). An interface that fails `init` warns once and retries every 30 s; `connected` stays `1`.                                                                                                                                                                       |
 
 ---
 
@@ -305,7 +308,7 @@ be covered end-to-end — otherwise ReGa stays unit-tested with recorded respons
 
 ---
 
-## 7. Implementation steps
+## 7. Implementation steps — done 2026-08-27 (commits on master, `3.0.0-dev.0`)
 
 Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, `lib/`,
 `test/*.test.js`, `Dockerfile`, `deploy.sh`, eslint/prettier, CI + release workflows, `AGENTS.md`.
@@ -352,7 +355,7 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
 
 ---
 
-## 8. Tests
+## 8. Tests — unit and simulator e2e done 2026-08-27
 
 - **Unit** (`node --test`): `message` (fixtures = real messages captured from the flow: subscribe
   `hm/status/#` on the live broker, save a few hundred payloads as `test/fixtures/flow-*.json`,
@@ -369,7 +372,7 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
 
 ---
 
-## 9. Cutover
+## 9. Cutover — open (needs a host in the CCU's LAN, see §12)
 
 1. Install on the home server as `hm2mqtt@hm3` with `--name hm3` while the flow keeps running
    (two clients on the CCU are fine — different callback URLs/init ids). Firewall: CCU → host
@@ -425,3 +428,43 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
 | OQ-50 | Is a Mosquitto ACL/dynsec role bound to the client id `homematic-ccu3`?                                                                                                                                                                                                              | Create a dynsec identity for `hm` via she instead; `--mqtt-client-id-prefix` as the fallback (H-17). |
 | OQ-51 | 2.5 published `hm.UNIT`; node-red-contrib-ccu's message has no unit. Add `datapointUnit` (from the description, `°C` decoding as in 2.5) to the `hm` block?                                                                                                                          | Yes — additive, harmless; also needed for HA discovery (3.1).                                        |
 | OQ-52 | Replacement for 2.5's `db/extend/<name>/<address>` metadata publish (`--publish-metadata`)? Nothing in the fleet consumes `db/extend` any more.                                                                                                                                      | Drop; `paramset/get` in 3.x (§10) covers the remaining use.                                          |
+
+---
+
+## 12. Implementation log — 2026-08-27
+
+What was built, in order, and what the live runs taught:
+
+- Prerequisites first: mqtt-interfaces-core 0.7.0 (G-4/G-5/G-6), homematic-rega 2.0.0 (ESM,
+  promises, zero deps, `timeZone`), homematic-xmlrpc 2.0.0 (built-in XML writer, `sax ^1.4`,
+  server `error`/`listening`, promise `close()`); all three on npm via the release workflows.
+- hm2mqtt 3.0.0-dev: `lib/interfaces.js`, `lib/rpc.js` (RpcServers + RpcConnection),
+  `lib/metadata.js` (seeded from node-red-contrib-ccu's `paramsets.json`, 2222 keys),
+  `lib/values.js` (createMessage port, wait-for-WORKING, `_NOTWORKING`, cache), `lib/rega.js`,
+  `lib/cast.js`, `lib/topics.js`, `lib/compare.js` + `scripts/compare-trees.js` (§9 tool),
+  `index.js`; README with both migration tables, CHANGELOG, AGENTS.md, Dockerfile, deploy.sh,
+  CI (lint/test on 20/22/24 + e2e job with mosquitto), release workflow.
+- Tests: 41 unit tests (fakes for RPC libs, timers, ReGa), e2e (`npm run test:e2e`) with
+  hm-simulator in-process (rfd binrpc, hmip xmlrpc, ReGa mock) and a spawned mosquitto:
+  init → newDevices → descriptions → `connected 2`, events with the full `hm` block, `PRESS_*`
+  not retained, plain tree, `set` by name and by address, variables/programs incl. enum-name set
+  and re-poll, `--rpc-topics`, warn-not-crash, SIGTERM → unsubscribe + state files.
+- Live against the CCU3 (3.87.6) from the development Mac: ReGa (886 channels, 3285 values,
+  umlauts), `listDevices` on all four interfaces (BidCos-RF 270, BidCos-Wired 104, HmIP-RF 457,
+  VirtualDevices 52), `getVersion`, `listBidcosInterfaces`, TLS+auth on the 4xxxx ports.
+  **The callback path could not be tested from here**: the CCU (172.16.24.0/24) has no route to
+  the Mac (192.168.8.x behind WireGuard; ICMP to the VPN address works, TCP does not). rfd's
+  `init` therefore blocks (it calls `listDevices` on us before answering) — now a 30 s timeout +
+  retry; HmIP-RF/VirtualDevices answer `init` first and call back later, so they report
+  connected without events arriving. The event path is verified with the simulator; the real
+  run needs hm2mqtt on the home server (H-7) — `deploy.sh` is ready for that.
+- Other findings: after a CCU reboot the HmIPServer answered `503` through the lighttpd proxy
+  for several minutes (init retries cover it); the CCU's own lighttpd proxy front-ends the
+  XML-RPC ports and handles TLS/auth, binrpc is not reachable remotely (so `--bidcos-binrpc`
+  is for CCU2/Homegear only); the auth is not enforced on this CCU (plain works); 5 duplicate
+  channel names exist (`Wetterstation`, `Tür Garage`, …) and are logged at start (they share a
+  topic, exactly as with the flow).
+- Answers received: OQ-43 keep `--plain-tree` opt-in; OQ-45 poll every 30 s (H-10); OQ-44
+  home server (confirmed by the network layout). Still open: OQ-46, 47, 48, 49, 50, 52.
+- Next: `npm run deploy <home-server>` (or `npm install -g` there), `--install -n hm3` for the
+  parallel run, `scripts/compare-trees.js mqtts://… hm hm3 3600 --ca …`, then the cutover of §9.
