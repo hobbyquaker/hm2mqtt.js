@@ -541,3 +541,25 @@ handful of datapoint-name rules covers those.
 3. `index.js`: `discovery()` returns the blocks, `discoveryTriggers` = devices/names changes (already re-published on `newDevices`), the `set` extensions of H-23 (`OPEN/CLOSE/STOP`, `ON/OFF`, `PRESS` aggregate).
 4. Validate against a real HA (docker `homeassistant/home-assistant` with the MQTT integration) — the fleet's open B-8 item; check entity counts, availability, climate modes, cover position/tilt, event entities.
 5. `--ha-discovery` default decision (OQ-53) and README section.
+
+---
+
+## 14. Backlog from the CCU-Jack / openccu-loom research (2026-08-27)
+
+Candidates, with effort and a suggested slot; prune as you like.
+
+| ID  | Item                                                                                                                                                                                                                                                                                     | Effort | Slot         |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------ |
+| B-1 | **Description fetching like CCU-Jack**: `VALUES` eagerly, `MASTER` lazily on first `paramset` use, `LINK`/`SERVICE` never (battery devices do not answer — the source of our `getParamsetDescription` timeouts), 50 ms spacing instead of 200 ms. 537 HmIP descriptions: ~2 min → ~20 s. | 0.5 h  | 3.0.0        |
+| B-2 | **Retained-topic cleaner for the cutover** (loom keeps a one-shot topic migrator): `scripts/clean-retained.js <url> <pattern>…` — the flow left 2291 nameless `hm/status//X` topics and years of stale items. Needed by §9.                                                              | 1 h    | 3.0.0        |
+| B-3 | **Periodic name re-sync**: `--rega-names-interval 3600` (`getChannels` costs 250 ms) so renames, rooms and functions propagate without a restart; `set/rega/sync` stays for immediate.                                                                                                   | 0.5 h  | 3.0.0        |
+| B-4 | **Datapoint ignore filter**: `--ignore '*.*.RSSI_*,HmIP-RF.*.*_STATUS'` (globs on `iface.channel.datapoint`) — a light version of loom's visibility model; cuts HmIP chatter and the HA entity flood (§13, OQ-53).                                                                       | 1 h    | 3.0.x        |
+| B-5 | **`get` topics** (CCU-Jack's REST read, over MQTT): `<name>/get/<channel>/<datapoint>` → `getValue` → republish; `<name>/get/<channel>/<paramset>` → `getParamset` → `<name>/status/paramset/<channel>/<paramset>` (resolves OQ-52; MASTER settings, datapoints the CCU never pushes).   | 2 h    | 3.1          |
+| B-6 | **Calculated items** (loom): dew point/enthalpy from temperature+humidity, battery % from per-model voltage tables (port loom's 75-entry `voltage_data`), derived binaries (`WINDOW_OPEN` from `RHS.STATE`, `SMOKE_ALARM` from the HmIP alarm enum). Opt-in `--calculated`.              | 0.5 d  | 3.2          |
+| B-7 | **Sysvar publish filter** (`--sysvar-filter` regex; CCU-Jack: description contains "mqtt", loom: `HAHM`/`HX` markers). Ten variables today — only when the list grows noisy.                                                                                                             | 0.5 h  | when needed  |
+| B-8 | **`<device>/online` item** from `UNREACH` with `STICKY_UNREACH` fallback (cul2mqtt's `online` pattern) so consumers get one boolean instead of inverting `UNREACH`. New item → additive, but decide deliberately.                                                                        | 1 h    | 3.1 with §13 |
+
+Deliberately **not** taken over: CCU-Jack's virtual devices (foreign MQTT devices as CCU devices via the
+VirtualDevices interface), loom's REST/WebSocket/MCP/web UI (she manages, MQTT is the API), multi-CCU
+in one process (fleet pattern: one instance per CCU, `hm2mqtt@ccu2`), running on the CCU itself
+(OQ-44).
