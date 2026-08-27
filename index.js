@@ -334,7 +334,9 @@ async function handleParamset(parts, value) {
         );
     }
     const {iface, conn} = connectionOf(target.address);
-    const description = metadata.description(iface, target.address, target.paramset) || {};
+    const description =
+        (await metadata.fetchDescription(iface, target.address, target.paramset, (m, p) => conn.methodCall(m, p))) ||
+        {};
     const paramset = {};
     const entries = whole ? Object.entries(value) : [[target.param, value]];
     for (const [param, v] of entries) {
@@ -534,6 +536,14 @@ async function startRega() {
     });
     regaSync.startPolling(config.regaPollInterval);
     loadCache().catch((err) => log.warn('rega getValues failed:', err.message));
+    if (config.regaNamesInterval > 0) {
+        timers.push(
+            setInterval(
+                () => regaSync.syncNames().catch((err) => log.warn('rega names re-sync failed:', err.message)),
+                config.regaNamesInterval * 1000,
+            ),
+        );
+    }
 }
 
 /** The ReGa's copy of every datapoint value: seeds the value store, published with --publish-cache. */

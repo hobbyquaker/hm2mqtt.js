@@ -67,38 +67,44 @@ describe('Metadata', () => {
         assert.equal(m.paramsetKey('BidCos-RF', CH1, 'DEF456:1'), 'BidCos-RF/HM-LC-Sw1-FM/1.4/1/SWITCH/LINK');
         assert.equal(m.paramsetKey('BidCos-RF', undefined, 'VALUES'), undefined);
         assert.equal(m.valueDescription('BidCos-RF', 'ABC:1', 'STATE'), undefined);
-        const missing = m.missingDescriptions('BidCos-RF');
+        // eager: VALUES only
         assert.deepEqual(
-            missing.map((x) => x.key),
-            [
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1//MASTER',
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1/MAINTENANCE/MASTER',
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1/MAINTENANCE/VALUES',
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1/SWITCH/MASTER',
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1/SWITCH/VALUES',
-                'BidCos-RF/HM-LC-Sw1-FM/1.4/1/SWITCH/LINK',
-            ],
+            m.missingDescriptions('BidCos-RF').map((x) => x.key),
+            ['BidCos-RF/HM-LC-Sw1-FM/1.4/1/MAINTENANCE/VALUES', 'BidCos-RF/HM-LC-Sw1-FM/1.4/1/SWITCH/VALUES'],
+        );
+        assert.equal(
+            m.missingDescriptions('BidCos-RF', undefined, {paramsets: ['MASTER', 'VALUES', 'LINK']}).length,
+            6,
         );
         const calls = [];
-        const fetched = await m.fetchDescriptions(
-            'BidCos-RF',
-            async (method, params) => {
-                calls.push(params);
-                if (params[1] === 'LINK') {
-                    throw new Error('no link');
-                }
-                return {STATE: {TYPE: 'BOOL', OPERATIONS: 7}};
-            },
-            {sleep: async () => {}, addresses: ['ABC:1']},
-        );
-        assert.equal(fetched, 2);
+        const rpc = async (method, params) => {
+            calls.push(params);
+            if (params[1] === 'LINK' || /:\d+$/.test(params[1])) {
+                throw new Error('no link');
+            }
+            return params[1] === 'MASTER'
+                ? {ON_TIME: {TYPE: 'FLOAT', OPERATIONS: 7}}
+                : {STATE: {TYPE: 'BOOL', OPERATIONS: 7}};
+        };
+        const fetched = await m.fetchDescriptions('BidCos-RF', rpc, {sleep: async () => {}, addresses: ['ABC:1']});
+        assert.equal(fetched, 1);
+        assert.deepEqual(calls, [['ABC:1', 'VALUES']]);
+        assert.deepEqual(m.valueDescription('BidCos-RF', 'ABC:1', 'STATE'), {TYPE: 'BOOL', OPERATIONS: 7});
+        assert.equal(m.missingDescriptions('BidCos-RF', ['ABC:1']).length, 0);
+        // on demand: MASTER once, SERVICE never
+        calls.length = 0;
+        assert.deepEqual(await m.fetchDescription('BidCos-RF', 'ABC:1', 'MASTER', rpc), {
+            ON_TIME: {TYPE: 'FLOAT', OPERATIONS: 7},
+        });
+        assert.deepEqual(await m.fetchDescription('BidCos-RF', 'ABC:1', 'MASTER', rpc), {
+            ON_TIME: {TYPE: 'FLOAT', OPERATIONS: 7},
+        });
+        assert.equal(await m.fetchDescription('BidCos-RF', 'ABC:1', 'SERVICE', rpc), undefined);
+        assert.equal(await m.fetchDescription('BidCos-RF', 'ABC:1', 'DEF456:1', rpc), undefined); // LINK fails → undefined
         assert.deepEqual(calls, [
             ['ABC:1', 'MASTER'],
-            ['ABC:1', 'VALUES'],
-            ['ABC:1', 'LINK'],
+            ['ABC:1', 'DEF456:1'],
         ]);
-        assert.deepEqual(m.valueDescription('BidCos-RF', 'ABC:1', 'STATE'), {TYPE: 'BOOL', OPERATIONS: 7});
-        assert.equal(m.missingDescriptions('BidCos-RF', ['ABC:1']).length, 1);
     });
 
     test('persistence and seed', () => {

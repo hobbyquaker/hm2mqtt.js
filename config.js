@@ -41,6 +41,12 @@ export const OPTIONS = {
         default: true,
     },
     'rega-poll-interval': {type: 'number', describe: 'seconds between variable/program polls, 0 = off', default: 30},
+    'rega-names-interval': {
+        type: 'number',
+        describe:
+            'seconds between re-reads of names, rooms and functions from ReGa, 0 = only at start and on set/rega/sync',
+        default: 3600,
+    },
     'rega-poll-trigger': {
         type: 'string',
         describe: 'channel.datapoint whose event triggers a variable/program poll, e.g. BidCoS-RF:50.PRESS_SHORT',
