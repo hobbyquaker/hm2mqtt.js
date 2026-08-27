@@ -22,6 +22,8 @@ import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
 import {castValue, isWriteable} from './lib/cast.js';
 import {sanitizeName, resolveSet, resolveParamset, plainValue, compileTemplate, ItemIndex} from './lib/topics.js';
+import {compileIgnore} from './lib/roles.js';
+import {discoveryModel} from './lib/hadiscovery.js';
 
 handleInstall(config);
 
@@ -92,10 +94,26 @@ const withHm = payloadFormat === 'mqsh-extended';
 /** the value as published: plain format uses node-red's 0/1 for booleans */
 const outValue = (value) => (payloadFormat === 'plain' ? plainValue(value) : value);
 
+const ignored = compileIgnore(config.ignore);
+
 const adapter = createAdapter({
     pkg,
     config,
     deviceLabel: 'ccu',
+    discovery: () =>
+        discoveryModel({
+            adapterName: pkg.name,
+            name: config.name,
+            jsonPayloads: config.jsonPayloads,
+            generic: config.haGeneric,
+            devices: metadata.devices,
+            description: (iface, address) => metadata.description(iface, address, 'VALUES'),
+            channelName,
+            rooms: (address) => (regaSync ? regaSync.rooms(address) : undefined),
+            itemFor: (iface, address, datapoint) => renderItem(values.fields(iface, address, datapoint)).name,
+            ignored,
+            interfaces: enabled,
+        }),
     info: () => ({
         ccu: host,
         interfaces: enabled,
@@ -215,6 +233,8 @@ function rebuildIndex() {
         );
     }
     log.debug('item index rebuilt:', itemIndex.size, 'items');
+    adapter.markDiscoveryDirty();
+    adapter.publishDiscovery();
 }
 
 function scheduleIndex() {
@@ -363,9 +383,47 @@ function connectionOf(address) {
     return {iface, conn};
 }
 
+/** HM thermostats: CONTROL_MODE is read-only, the modes are set through actions (H-26) */
+const HM_MODES = {
+    'AUTO-MODE': () => ['AUTO_MODE', true],
+    'MANU-MODE': (setpoint) => ['MANU_MODE', setpoint],
+    'BOOST-MODE': () => ['BOOST_MODE', true],
+    'COMFORT-MODE': () => ['COMFORT_MODE', true],
+    'LOWERING-MODE': () => ['LOWERING_MODE', true],
+};
+
+/** Words Home Assistant's single-topic conventions send to LEVEL (H-23). */
+const LEVEL_WORDS = {OPEN: 1, CLOSE: 0, ON: 1.005, OFF: 0};
+
 async function setValue(address, datapoint, value) {
     const {iface, conn} = connectionOf(address);
-    const description = metadata.valueDescription(iface, address, datapoint);
+    let description = metadata.valueDescription(iface, address, datapoint);
+    if (datapoint === 'LEVEL' && typeof value === 'string') {
+        const word = value.trim().toUpperCase();
+        if (word === 'STOP') {
+            if (!metadata.valueDescription(iface, address, 'STOP')) {
+                throw new Error(`${address} has no STOP`);
+            }
+            return setValue(address, 'STOP', true);
+        }
+        if (word in LEVEL_WORDS) {
+            value = LEVEL_WORDS[word];
+        }
+    }
+    if (
+        datapoint === 'CONTROL_MODE' &&
+        typeof value === 'string' &&
+        HM_MODES[value.toUpperCase()] &&
+        !isWriteable(description)
+    ) {
+        const current = values.get(iface, address, 'SET_TEMPERATURE');
+        const [dp, v] = HM_MODES[value.toUpperCase()](
+            current && typeof current.value === 'number' ? current.value : 20,
+        );
+        datapoint = dp;
+        value = v;
+        description = metadata.valueDescription(iface, address, datapoint);
+    }
     if (!isWriteable(description)) {
         throw new Error(`${address} ${datapoint} is not writeable`);
     }
@@ -502,6 +560,9 @@ function onEvent(iface, event) {
         regaSync.poll().catch((err) => log.warn('rega poll failed:', err.message));
     }
     values.event({iface, ...event}, (message) => {
+        if (ignored(iface, event.channel, event.datapoint)) {
+            return;
+        }
         const description = metadata.valueDescription(iface, event.channel, event.datapoint);
         if (!metadata.device(iface, event.channel)) {
             log.debug(iface, 'event of unknown channel', event.channel);
@@ -509,6 +570,19 @@ function onEvent(iface, event) {
             log.debug(iface, 'no description for', event.channel, event.datapoint);
         }
         publishMessage(message, {retain: !isEvent(event.datapoint, description)});
+        if (event.datapoint.startsWith('PRESS_') && event.value) {
+            // one event item per key channel carrying every press type (HA event entities, H-23)
+            publishMessage(
+                {
+                    ...message,
+                    datapoint: 'PRESS',
+                    datapointName: message.datapointName.replace(/PRESS_\w+$/, 'PRESS'),
+                    value: event.datapoint,
+                    payload: event.datapoint,
+                },
+                {retain: false},
+            );
+        }
         const notWorking = values.notWorking(message);
         if (notWorking) {
             publishMessage(notWorking);

@@ -95,6 +95,16 @@ export const OPTIONS = {
         default: true,
     },
     'duty-cycle-interval': {type: 'number', describe: 'seconds between duty cycle polls, 0 = off', default: 90},
+    ignore: {
+        type: 'string',
+        describe:
+            'comma separated globs on <interface>.<channel>.<datapoint> not to publish, e.g. "*.*.RSSI_*,HmIP-RF.*.*_STATUS"',
+    },
+    'ha-generic': {
+        type: 'boolean',
+        describe: 'Home Assistant discovery: also announce datapoints without a role as (disabled) generic entities',
+        default: true,
+    },
     'rpc-topics': {
         type: 'boolean',
         describe: 'accept arbitrary rpc calls on <name>/rpc/<interface>/<method>/<callid> (security surface!)',
