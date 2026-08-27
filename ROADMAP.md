@@ -471,5 +471,14 @@ What was built, in order, and what the live runs taught:
   stands); OQ-50 no broker ACL on the client id (core scheme `hm_<random>`); OQ-47 Home
   Assistant is not a priority (3.1 stays on the list). Still open: OQ-48 (spec note), OQ-52.
 - The parallel run and cutover (§9) are done by the user on the home server.
+- **Live on the home server (mqtt-ifaces, 2026-08-27 17:30, after the CCU firewall was opened):**
+  all four interfaces subscribed, 270/104/457/52 devices announced, 537 missing HmIP descriptions
+  fetched, events flowing (542 batches from HmIP-RF in 150 s). `hm3/set/Licht Kellertreppe/STATE`
+  true/false → `setValue` → event back on `hm3` **and** on the flow's `hm` after ~470 ms each;
+  payloads field-for-field identical except `hm.ccu` (`localhost` on the flow, which ran on the
+  CCU, vs. the configured `--ccu-address`). First-start events that arrive before `newDevices`
+  lacked device/datapoint fields → now held until the devices are known. Test checkout left at
+  `~/hm2mqtt-test` on the host (state dir `state/`, `run*.log`, `compare*.txt`); retained `hm3/#`
+  test topics cleared afterwards.
 - Next: `npm run deploy <home-server>` (or `npm install -g` there), `--install -n hm3` for the
   parallel run, `scripts/compare-trees.js mqtts://… hm hm3 3600 --ca …`, then the cutover of §9.

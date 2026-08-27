@@ -166,6 +166,7 @@ devices yet — channel-type to entity mapping is planned for 3.1 (ROADMAP §10)
 Same topics for events, variables, programs, counters, `set` and `paramset`. Differences:
 
 - `<name>/connected` reflects the CCU: `1` while an interface is down (the flow always said `2`).
+- `hm.ccu` is the configured `--ccu-address` (the flow, running on the CCU, said `localhost`).
 - Counters and duty cycle payloads are `{val, ts, lc}` like every other status (`val` unchanged).
 - `PRESS_*` **and** other `ACTION` datapoints are not retained.
 - Variables and programs are published at start too, not only on change; polling is on by default.
