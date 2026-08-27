@@ -407,9 +407,8 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
   with `activateLinkParamset`).
 - **Read paramsets**: `<name>/set/paramset/get/<ch>/<paramset>` → `<name>/status/paramset/<ch>/<paramset>`
   (replaces 2.5's `db/extend` metadata publish, OQ-52).
-- **Drop `--plain-tree`** once nothing consumes `hm/state` (OQ-43); drop `--hm-payload` size by
-  trimming duplicate fields (`hm.ts`/`hm.lc`) when consumers are known (OQ-46) — both are 4.0
-  breaks.
+- **Drop `--plain-tree`** once nothing consumes `hm/state` (OQ-43) — a 4.0 break. The `hm`
+  block is not trimmed: its fields are consumed (OQ-46, 2026-08-27).
 - binrpc 4.0 / homematic-xmlrpc 2.0 without `binary`/`put`/`sax 0.4`.
 
 ---
@@ -465,6 +464,12 @@ What was built, in order, and what the live runs taught:
   channel names exist (`Wetterstation`, `Tür Garage`, …) and are logged at start (they share a
   topic, exactly as with the flow).
 - Answers received: OQ-43 keep `--plain-tree` opt-in; OQ-45 poll every 30 s (H-10); OQ-44
-  home server (confirmed by the network layout). Still open: OQ-46, 47, 48, 49, 50, 52.
+  home server (confirmed by the network layout); OQ-46 **consumers read `hm.channel`/
+  `channelName`/`device`, `valueEnum`/`datapointEnum`/`datapointUnit`, `working`/`direction`/
+  `stable` and `rooms`/`functions` — the whole `hm` block is API, H-2 stays the default for
+  good, no trimming in 4.0**; OQ-49 non-`PRESS_` ACTION datapoints unretained is fine (H-9
+  stands); OQ-50 no broker ACL on the client id (core scheme `hm_<random>`); OQ-47 Home
+  Assistant is not a priority (3.1 stays on the list). Still open: OQ-48 (spec note), OQ-52.
+- The parallel run and cutover (§9) are done by the user on the home server.
 - Next: `npm run deploy <home-server>` (or `npm install -g` there), `--install -n hm3` for the
   parallel run, `scripts/compare-trees.js mqtts://… hm hm3 3600 --ca …`, then the cutover of §9.
