@@ -1,0 +1,426 @@
+# Roadmap & implementation spec — hm2mqtt 3.0
+
+hm2mqtt 2.5 (2018, CommonJS, Node 6, `yalm`/`request`/`persist-json`) was abandoned in favour of
+[node-red-contrib-ccu](https://github.com/rdmtc/node-red-contrib-ccu); since then the Homematic
+side of the house has been a Node-RED flow (two `ccu-mqtt` nodes + a `ccu-rpc` duty-cycle poll)
+running on the CCU3 under RedMatic. 3.0 reverses that: hm2mqtt becomes a normal `xyz2mqtt` adapter
+on [mqtt-interfaces-core](https://github.com/hobbyquaker/mqtt-interfaces-core) (mqtt-smarthome
+spec 2.x) and a **drop-in replacement for that flow** — same topics, same payloads, so that the
+`she` scripts and everything else subscribed to `hm/#` keep working when the flow is switched off.
+
+Decisions specific to this repo are **H-n**, core gaps continue the core numbering at **G-4+**
+(G-1…G-3 were alexa-remote-mqtt's, core 0.3.0), open questions continue the fleet numbering at
+**OQ-43+**. Fleet decisions (D-n) and the core's (C-n) are referenced, not repeated. The master
+roadmap in the `mqtt-interfaces` umbrella repo was not reachable while writing this; D-n references
+follow the core README/ROADMAP wording.
+
+**Status 2026-08-27: planning; the prerequisites of §6 (core 0.7.0, homematic-rega 2.0.0, homematic-xmlrpc 2.0.0) are done and tagged, hm2mqtt itself is not started.**
+
+Contents: 1 the contract (what the flow does today) · 2 what 2.5 and node-red-contrib-ccu
+contribute · 3 decisions · 4 topics (Node-RED → 3.0, 2.5 → 3.0) · 5 CLI/env · 6 prerequisites in
+sibling libs and the core · 7 implementation steps · 8 tests · 9 cutover · 10 after 3.0 ·
+11 open questions.
+
+---
+
+## 1. The contract — what the Node-RED flow does today
+
+Source: the exported `MQTT` tab (2026-08-27) and node-red-contrib-ccu 3.4.2
+(`nodes/ccu-mqtt.js`, `nodes/ccu-connection.js`, checkout at
+`~/WebstormProjects/node-red-contrib-ccu`).
+
+### 1.1 Setup
+
+| what                    | value                                                                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| runs on                 | the CCU3 itself (RedMatic), `host: localhost` → local binrpc ports (32001/32010/…), ReGa 8183                                                                       |
+| interfaces              | ReGaHSS, BidCos-RF, HmIP-RF, VirtualDevices, BidCos-Wired; **CUxD off**                                                                                            |
+| RPC callback server     | `127.0.0.1`, binrpc 2047, xmlrpc 2048; ping timeout 60 s (HmIP-RF: 600 s hard-coded), setValue queue timeout 5000 ms / pause 250 ms                                |
+| ReGa polling            | **off** (`regaPoll: false`, interval 30 s configured but unused) → sysvars/programs are published at start and after a `set` only (or by `ccu-poll` on other tabs) |
+| cache                   | **off** on both `ccu-mqtt` nodes → no initial state publish at start, retained messages on the broker carry the state                                              |
+| broker                  | `mqtts://mqtt.lan.raff.rocks:8883`, own CA (`Honest_Basti_Root_CA.pem`), verify server cert, client id `homematic-ccu3`, keepalive 30, clean session               |
+| birth / will            | `hm/connected` = `2` retained on connect, `0` retained as will (Node-RED mqtt node — **not** the CCU state)                                                         |
+| duty cycle              | every 90 s `listBidcosInterfaces` on BidCos-RF → `hm/status/<ifaceAddress>/DUTY_CYCLE` retained, plain number (function node)                                      |
+| subscriptions           | `hm/set/#` (payload auto), `hm/paramset/#` (payload JSON)                                                                                                          |
+| node 1 (`mqsh-extended`)| output `hm/status/…`, counters `hm/status/counter/…`                                                                                                                |
+| node 2 (`plain`)        | the same under `hm/state/…` with plain payloads, counters `hm/state/counter/…`                                                                                     |
+
+### 1.2 Output topics
+
+`<ch>` = ReGa channel name (fallback: address — `topicReplace` inserts an empty string when the
+name is unknown, i.e. `hm/status//STATE`; a bug we do not reproduce).
+
+| topic                                                 | retained                 | payload (`mqsh-extended` node)                                                                                                                                                         |
+| ----------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hm/status/<ch>/<datapoint>`                          | yes, except `PRESS_*`    | `{val, ts, lc, hm: {…}}` — `hm` is the node-red-contrib-ccu message minus `topic`/`payload`/`value`, see 1.4                                                                           |
+| `hm/status/<ch>/LEVEL_NOTWORKING`, `…/STATE_NOTWORKING` | yes                      | same, published when `working === false` for `LEVEL`/`STATE` (300 ms wait-for-working on actuator channel types); `hm.datapoint`/`hm.datapointName` carry the `_NOTWORKING` suffix |
+| `hm/status/<sysvarName>`                              | yes                      | `{val, ts, lc, hm: {iface: 'ReGaHSS', type: 'SYSVAR', …}}`; `ts` = CCU-side timestamp of the variable, only on change (`change: true` filter)                                          |
+| `hm/status/<programName>`                             | yes                      | `{val: <active>, ts, hm: {type: 'PROGRAM', …}}` (no `lc`), on every poll where `active` or `ts` (last execution) changed                                                                |
+| `hm/status/counter/<iface>/rx`, `…/tx`                | yes                      | plain integer; `0` published 25 s after start, then every 30 s on change. rx = event batches (not PONG), tx = `setValue`/`putParamset`/`activateLinkParamset` calls                    |
+| `hm/status/<ifaceAddress>/DUTY_CYCLE`                 | yes                      | plain integer (function node, not a ccu-mqtt output)                                                                                                                                   |
+| `hm/state/…` (all of the above)                       | as above                 | plain: booleans as `0`/`1`, numbers/strings raw, objects JSON                                                                                                                          |
+| `hm/connected`                                        | yes                      | `2` / `0`                                                                                                                                                                              |
+
+### 1.3 Input topics
+
+| topic                                          | payload                                                                                                                                                      | behaviour                                                                                                                                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hm/set/<channelNameOrAddress>/<datapoint>`    | auto: number, boolean, string, JSON                                                                                                                          | name → address (channels only), iface lookup, `paramCast` by paramset description (BOOL/ACTION/FLOAT→`explicitDouble`/ENUM by name/INTEGER/STRING), 500 ms per-datapoint throttle/defer         |
+| `hm/set/<sysvarOrProgramName>`                 | sysvar: typed (enum names accepted); program: boolean → `Active(bool)`, anything else → `ProgramExecute()`                                                   | after a sysvar set an immediate ReGa poll runs                                                                                                                                                |
+| `hm/paramset/<channelNameOrAddress>/<paramset>/<param>` | single value                                                                                                                                        | `putParamset` with one key. Bugs in the node: writeable check `!(OPERATIONS) && 2` is always false; cast uses `description[filter.param]` = undefined in `putParamset` → values pass uncast |
+| `hm/paramset/<channelNameOrAddress>/<paramset>` | JSON object                                                                                                                                                 | `putParamset` with all keys                                                                                                                                                                   |
+| `hm/rpc/<iface>/<method>/<command>/<callid>`   | —                                                                                                                                                            | **dead**: configured on the node but the `ccu-mqtt` node has no `rpc()` handler, and the flow does not even subscribe `hm/rpc/#`                                                              |
+
+### 1.4 The `hm` block (datapoint events)
+
+Field names of node-red-contrib-ccu's `createMessage()` — the compatibility surface for
+`mqsh-extended`; 3.0 keeps them 1:1 (H-2):
+
+`ccu, iface, device, deviceName, deviceType, channel, channelName, channelType, channelIndex,
+datapoint, datapointName (= "<iface>.<channel>.<datapoint>"), datapointType, datapointMin,
+datapointMax, datapointEnum, datapointDefault, datapointControl, valuePrevious, valueEnum,
+valueStable, rooms, room, functions, function, ts, tsPrevious, lc, change, cache, uncertain,
+working, direction, stable`.
+
+Sysvar: `ccu, iface: 'ReGaHSS', type: 'SYSVAR', name, info, valueType, valueEnum, unit, enum, id,
+cache, valuePrevious, valueEnumPrevious, ts, tsPrevious, lc, lcPrevious, change` plus the channel
+fields above when the variable is bound to a channel. Program: `id, ccu, iface, type: 'PROGRAM',
+name, active, activePrevious, ts, tsPrevious`.
+
+### 1.5 Known consumers
+
+- `she` scripts: `hm//<channel>/<datapoint>` (`//` = `/status/`), `she.mqtt.get()` reads `val`,
+  `she.getProp(topic, 'ts')` reads `ts`; `she.mqtt.pub('hm/set/…')`. she's AI tool prompt describes
+  the `hm/` tree (STATE for switches, LEVEL for dimmers).
+- Whether anything reads `hm/state/…` or the `hm.*` fields is unknown → OQ-43, OQ-46.
+
+---
+
+## 2. What the two code bases contribute
+
+### 2.1 hm2mqtt 2.5 (this repo, `index.js`, 1100 lines)
+
+Almost nothing is kept verbatim (CJS, callbacks, `request`, `yalm`, `persist-json`, node 6), but
+the structure is the same problem solved once already:
+
+- RPC clients + servers for binrpc (rfd, hs485d) and xmlrpc (hmip), `init`/`ping`/re-init per
+  interface, `system.multicall` unpacking, `listDevices`/`newDevices`/`deleteDevices` with a
+  persisted device table, a throttled `getParamsetDescription` queue keyed by
+  `PARENT_TYPE/VERSION/TYPE`, `rpcType()` casting, `_NOTWORKING`, rx/tx counters, duty-cycle poll,
+  interface port probing (`discover.js`), ReGa scripts for names/variables/programs
+  (`regascripts/*.fn`), `--rega-poll-trigger` (virtual button as pseudo push).
+- Topics differ from the flow (`hm/param/…`, `hm/rega/<var>`, iface names `rfd`/`hmip`/`hs485d`,
+  `hm/rpc/<iface>/<command>/<callid>` → `hm/response/<callid>`, `db/extend/…` metadata). 3.0 follows
+  the flow; 2.5 users (are there any? last npm publish 2022, code from 2018) get a migration table.
+- `test.js`: mocha e2e against `hm-simulator` (rfd binrpc + hmipserver xmlrpc, no ReGa) driven by
+  log-line regexes. The simulator still exists on npm (0.1.1, 2022) and is the basis of the 3.0 e2e
+  test (§8).
+
+### 2.2 node-red-contrib-ccu 3.4.2 (`ccu-connection.js`, 2950 lines)
+
+The reference implementation; the Homematic half of 3.0 is a port of it minus Node-RED:
+
+- interface table (§1.1 ports, local vs. remote, TLS/auth variants 4xxxx, `VirtualDevices` with
+  path `/groups`, CUxD binrpc 8701, HmIP-RF ping timeout 600 s), `rpcCheckInit` (ping at
+  `timeout/2`, re-init after `timeout`, check every `timeout/4`), init id derivable from the URL,
+  `getLinks` after init, de-init on close, server `close()` with timeout.
+- metadata persistence (`ccu_<host>.json` devices/types, `paramsets.json` descriptions keyed by
+  `<iface>/<TYPE>/<FIRMWARE>/<VERSION>/<channelTYPE>/<paramset>`, `ccu_values_<host>.json` last
+  values), shipped `paramsets.json` seed, `listDevicesAnswer` per interface (full device for
+  HmIP-RF/VirtualDevices, `{ADDRESS, VERSION}` otherwise, empty-string workaround occu#83),
+  HmIP-RCV-50 workaround in `listDevices`.
+- `createMessage()` (§1.4), `working`/`direction` derivation from `WORKING`, `WORKING_SLATS`,
+  `PROCESS`, `DIRECTION`, `ACTIVITY_STATE` inside a multicall and the 300 ms wait-for-working for
+  `STATE`/`LEVEL*` on `SIGNAL|SWITCH|RAINDETECTOR_HEAT|ALARMACTUATOR|ARMING|DIMMER|DUAL_WHITE|BLIND|SHUTTER|JALOUSIE|WINMATIC|KEYMATIC`
+  channel types; `stable = !working`.
+- ReGa via `homematic-rega` (channels with names, rooms, functions, `getValues` for the cache,
+  variables, programs, `exec`), RSSI `-256` correction on cached values, `uncertain` for
+  1970 timestamps, `setVariable` deferral until variables are known.
+- `paramCast()` (§1.3; MIN/MAX clamping deliberately disabled, ccu#74), `setValue` 500 ms
+  throttle/defer per datapoint (last write wins), `setValueQueued` (dedupe, timeout, pause — used by
+  the `ccu-set-value` node, not by `ccu-mqtt`), tx/rx counters.
+
+---
+
+## 3. Decisions
+
+| ID   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H-1  | **3.0.0 = rewrite on mqtt-interfaces-core** (ESM, Node ≥ 20.19, D-4), hard break from 2.5 (D-2). npm package stays `hm2mqtt` (unscoped, bin `hm2mqtt`, env prefix `HM2MQTT_`, default `--name hm`); the GitHub repo stays `hm2mqtt.js`. **The Node-RED flow is the reference, not 2.5**: where the two differ (§4.2) 3.0 follows the flow.                                                                                                                                                                             |
+| H-2  | **Payloads are `{val, ts, lc}` + `hm` block** (mqsh-extended) by default; the `hm` block keeps node-red-contrib-ccu's field names 1:1 (§1.4). `--no-hm-payload` drops the block (`{val, ts, lc}` only); `--no-json-payloads` gives plain values (core). Needs core G-4 and G-5. `ts`/`lc` of sysvars and cached values are the CCU-side timestamps, as in the flow.                                                                                                                                                       |
+| H-3  | **Items are the CCU's names, verbatim**: `<channelName>/<DATAPOINT>` (channel name from ReGa, address when unknown), `<sysvarName>`, `<programName>`, `counter/<iface>/<rx\|tx>`, `<ifaceAddress>/DUTY_CYCLE`. No snake_case, no lower-casing (drop-in; datapoint names are protocol constants) — an accepted deviation from the fleet convention (OQ-48). `/` in a name stays (deeper topic, as today); `+`, `#` and empty levels are replaced by `_` with a `warn`. `set/<…>/<DATAPOINT>` takes the last level as datapoint, the rest as name or address. |
+| H-4  | **The plain mirror tree `hm/state/…` is opt-in**: `--plain-tree <level>` (e.g. `state`, default off) publishes every status item a second time under `<name>/<level>/…` with plain payloads and booleans as `0`/`1`, exactly as the second `ccu-mqtt` node did. Kept for the cutover only; to be removed once nothing reads it (OQ-43).                                                                                                                                                                                  |
+| H-5  | **`<name>/connected` means something now**: `2` only when every enabled RPC interface is initialised and ReGa answered, `1` otherwise (the flow always said `2`). Per-interface state as retained `<name>/status/interface/<iface>/connected` (`true`/`false`, no `hm` block) — the `interface/` and `counter/` levels are reserved names; a channel named like them gets `_` appended with a `warn`.                                                                                                                          |
+| H-6  | **Interface names are the CCU's** (`BidCos-RF`, `HmIP-RF`, `BidCos-Wired`, `VirtualDevices`, `CUxD`, `ReGaHSS`) in topics, `hm.iface`, options and logs. 2.5's `rfd`/`hmip`/`hs485d` are gone. Enabled by `--interfaces` (default `BidCos-RF,HmIP-RF,VirtualDevices,BidCos-Wired`, i.e. the flow; `CUxD` opt-in); an enabled interface whose port does not answer is `warn` + retry every 30 s, not an exit. `--interfaces auto` probes the ports (2.5's `discover.js`).                                              |
+| H-7  | **hm2mqtt runs on the home server, not on the CCU**, as systemd template unit `hm2mqtt@hm` (core installer) next to the other adapters, and talks to the CCU over the network: XML-RPC 2001/2000/2010/9292 (`--ccu-tls`/`--ccu-username`/`--ccu-password` for the 4xxxx ports and auth, `secret: true`), binrpc for CUxD 8701 (and `--bidcos-binrpc` for 2001), ReGa 8181. Callback servers bind `--listen-address` (default: first non-loopback IPv4) on `--xmlrpc-port 2126` / `--binrpc-port 2127` (2.5's defaults), `--init-address` when NAT/Docker is in the way. The CCU firewall must allow the host. Running on the CCU is not planned (OQ-44). |
+| H-8  | **State lives in `STATE_DIRECTORY`** (`--state-dir`, default `process.env.STATE_DIRECTORY` or `~/.hm2mqtt`): `devices.json` (per interface), `paramsets.json` (descriptions, seeded from node-red-contrib-ccu's `paramsets.json` shipped in the package), `rega.json` (names, rooms, functions), `values.json` (last values, for `valuePrevious`/`lc` across restarts). `<name>/set/…` with unknown names is answered with a `warn`, and a ReGa re-read can be forced with `<name>/set/rega/sync` (replaces 2.5's `command/regasync`).                          |
+| H-9  | **Events**: `PRESS_*` datapoints and every `TYPE: 'ACTION'` datapoint are published with `retain: false` (2.5 did ACTION, the flow did `PRESS_*`; the union is what mqtt-smarthome means by an event). Slight deviation for non-`PRESS_` ACTION datapoints (OQ-49). `_NOTWORKING` items are retained and carry the same payload as the flow.                                                                                                                                                                             |
+| H-10 | **ReGa polling on by default**: `--rega-poll-interval 30` (0 = off) publishes sysvars/programs on change (`ts` change, like the flow's `change: true` filter — no noise when nothing changed); `--rega-poll-trigger BidCoS-RF:50.PRESS_SHORT`-style pseudo-push from 2.5 is kept; a `set/<sysvar>` triggers an immediate poll. The flow had polling off, see OQ-45.                                                                                                                                                       |
+| H-11 | **No initial state dump by default** (`cache: false` in the flow): retained messages on the broker are the state. `--publish-cache` publishes every datapoint from ReGa `getValues` at start with CCU-side `ts` and `hm.cache: true` / `hm.uncertain` — useful after renames and for a fresh broker, thousands of messages otherwise.                                                                                                                                                                                   |
+| H-12 | **Set path = node-red-contrib-ccu's, with its bugs fixed**: `paramCast` by paramset description (ENUM names, `explicitDouble`, no MIN/MAX clamping, string fallback for unknown descriptions), the 500 ms per-datapoint throttle/defer, writeable check (`OPERATIONS & 2`) that actually works and rejects with `warn`, `paramset` values cast by *their own* description. `set` accepts plain and `{val}` payloads (core). Sysvar/program `set` as in §1.3.                                                                  |
+| H-13 | **`rpc` topics come back, opt-in**: `--rpc-topics` subscribes `<name>/rpc/<iface>/<method>/<callid>` (JSON array params) and answers on `<name>/response/<callid>` (2.5 semantics; the flow's 4-level pattern never worked). Off by default — an unrestricted RPC surface over MQTT is a security surface, like `--raw-set` elsewhere in the fleet.                                                                                                                                                                       |
+| H-14 | **Counters and duty cycle stay**: `--publish-counters` (default on) → `counter/<iface>/rx`, `…/tx` on change (rate-limited to 30 s as today, initial `0` at start); `--duty-cycle-interval 90` (0 = off) → `<ifaceAddress>/DUTY_CYCLE` via `listBidcosInterfaces` on BidCos-RF **and** HmIP-RF (the flow only asked BidCos-RF, which on a CCU3 lists both adapters anyway), plus `<ifaceAddress>/CARRIER_SENSE_LEVEL` and `…/CONNECTED` when present. Payloads follow H-2 (the flow's were plain — `val` is the same number). |
+| H-15 | **Home Assistant discovery is not part of 3.0.0** — `discovery()` returns nothing, `--ha-discovery` exists (core) but announces no devices. 3.1 adds channel-type → entity mapping (§10). D-5 (on by default) is honoured as soon as there is something to announce.                                                                                                                                                                                                                                                       |
+| H-16 | **Logging per fleet rules**: `rpc <`/`rpc >` per interface and `rega <`/`rega >` at `debug`; an interface that stops answering or a ping timeout is `warn` once (recovery `info`); unknown paramset descriptions `debug` (they are fetched); a rejected `set` is `warn` with topic, payload and reason (core); `error` only for bad config (no CCU address, port bind failure).                                                                                                                                             |
+| H-17 | **Client id**: core scheme `<prefix><name>_<random>`; use `--mqtt-client-id-prefix homematic-ccu3_` if a broker ACL is bound to the old id `homematic-ccu3` (OQ-50). TLS with own CA via `--mqtt-tls-ca` (or the shared `MQTT_TLS_CA` in `/etc/mqtt-interfaces/broker.env`).                                                                                                                                                                                                                                        |
+
+---
+
+## 4. Topics
+
+`<name>` = `--name` (default `hm`). Payloads `{val, ts, lc, hm}` unless noted (H-2).
+
+### 4.1 Node-RED flow → 3.0 (the drop-in table)
+
+| flow                                                | 3.0                                               | notes                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `hm/connected` `2`/`0`                              | `<name>/connected` `0`/`1`/`2`                    | `1` while an interface is down (H-5) — consumers testing `== 2` see the CCU state now                          |
+| —                                                   | `<name>/info`                                     | core fields + `ccu` (address), `interfaces` (enabled list), `devices` (count), `rega` (bool)                    |
+| —                                                   | `<name>/status/interface/<iface>/connected`       | H-5                                                                                                            |
+| `hm/status/<ch>/<dp>`                               | unchanged                                         | `hm` block 1:1                                                                                                 |
+| `hm/status/<ch>/LEVEL_NOTWORKING`, `STATE_NOTWORKING` | unchanged                                        |                                                                                                                |
+| `hm/status/<sysvar>`, `hm/status/<program>`         | unchanged                                         | published on change; poll interval H-10                                                                        |
+| `hm/status/counter/<iface>/rx\|tx`                  | unchanged topic                                   | payload was plain, now `{val, ts, lc}` (`val` unchanged)                                                       |
+| `hm/status/<ifaceAddress>/DUTY_CYCLE`               | unchanged topic                                   | payload was plain, now `{val, ts, lc}`; also HmIP-RF, `CARRIER_SENSE_LEVEL`, `CONNECTED` (H-14)                |
+| `hm/state/…` (plain mirror)                         | `--plain-tree state` (opt-in)                     | H-4                                                                                                            |
+| `hm/set/<chNameOrAddr>/<dp>`                        | unchanged                                         | `{val}` wrapper also accepted                                                                                  |
+| `hm/set/<sysvar\|program>`                          | unchanged                                         |                                                                                                                |
+| `hm/paramset/<chNameOrAddr>/<paramset>/<param>`     | unchanged                                         | now cast + writeable-checked (H-12)                                                                            |
+| `hm/paramset/<chNameOrAddr>/<paramset>` (JSON)      | unchanged                                         |                                                                                                                |
+| `hm/rpc/<iface>/<method>/<command>/<callid>` (dead) | `<name>/rpc/<iface>/<method>/<callid>` → `<name>/response/<callid>`, `--rpc-topics` | H-13                                                                                                           |
+| —                                                   | `<name>/set/rega/sync`                            | re-read names/rooms/functions (H-8)                                                                            |
+| —                                                   | `<name>/maintenance/set/loglevel`, `…/restart`    | core (D-9), `--no-maintenance`                                                                                 |
+
+### 4.2 hm2mqtt 2.5 → 3.0 (for the README's migration section)
+
+| 2.5                                                | 3.0                                              |
+| -------------------------------------------------- | ------------------------------------------------ |
+| `hm/status/<ch>/<dp>` `{val, ts, lc, hm: {ADDRESS, UNIT, ENUM}}` | same topic, `hm` block per §1.4 (`hm.channel`, `hm.datapointEnum`/`valueEnum`, unit is not part of the message → OQ-51) |
+| `hm/status/<var>` `{val, ts, hm: {id, UNIT, MIN, MAX, ENUM}}` | same topic, sysvar `hm` block per §1.4 |
+| `hm/rega/<var\|program>`                           | `hm/set/<var\|program>`                          |
+| `hm/param/<ch>/<paramset>/<dp>`                    | `hm/paramset/<ch>/<paramset>/<param>`            |
+| `hm/paramset/<ch>/<paramset>`                      | unchanged                                        |
+| `hm/rpc/<rfd\|hmip\|hs485d>/<command>/<callid>`    | `hm/rpc/<BidCos-RF\|HmIP-RF\|BidCos-Wired\|…>/<method>/<callid>`, `--rpc-topics` |
+| `hm/command/regasync`                              | `hm/set/rega/sync`                               |
+| `hm/status/counter/<rfd\|hmip>/rpc/<rx\|tx>`       | `hm/status/counter/<BidCos-RF\|HmIP-RF>/<rx\|tx>` |
+| `db/extend/hm/<address>` (`--publish-metadata`)    | dropped (OQ-52)                                  |
+| `--ccu-address`, `--mqtt-url`, `-n`, `-v`, `--insecure`, `--json-name-table`, `--disable-rega`, `--mqtt-retain` | see §5 |
+
+---
+
+## 5. CLI / env
+
+Shared set from the core (`--mqtt-url/-u`, `--mqtt-username`, `--mqtt-password`,
+`--mqtt-client-id-prefix`, `--mqtt-tls-ca`, `--name/-n`, `--json-payloads`, `--ha-discovery`,
+`--ha-prefix`, `--maintenance`, `--verbosity/-v`, `--install`, `--uninstall`, `--config-schema`)
+plus, all as `HM2MQTT_<OPTION>`:
+
+| option                      | alias | type    | default                          | notes                                                                                        |
+| --------------------------- | ----- | ------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `--ccu-address`             | `-a`  | string  | —, required                      | CCU host/IP                                                                                  |
+| `--ccu-tls`                 |       | boolean | false                            | use the 4xxxx TLS ports and `https` ReGa                                                     |
+| `--ccu-insecure`            |       | boolean | false                            | accept the CCU's self-signed certificate                                                     |
+| `--ccu-username`, `--ccu-password` |  | string  | —                                | CCU authentication; password `secret: true`                                                   |
+| `--interfaces`              | `-i`  | string  | `BidCos-RF,HmIP-RF,VirtualDevices,BidCos-Wired` | comma list or `auto` (H-6); `CUxD` opt-in                                     |
+| `--bidcos-binrpc`           |       | boolean | false                            | talk binrpc instead of XML-RPC to BidCos-RF/-Wired                                           |
+| `--listen-address`          | `-l`  | string  | first non-loopback IPv4          | RPC callback servers bind here                                                               |
+| `--init-address`            |       | string  | = listen address                 | address the CCU should call back (NAT/Docker)                                                |
+| `--xmlrpc-port`, `--binrpc-port` |  | number  | 2126, 2127                       |                                                                                              |
+| `--ping-timeout`            |       | number  | 60                               | seconds without an event before ping / re-init; HmIP-RF uses 600 (occu#42)                   |
+| `--rega`                    |       | boolean | true                             | `--no-rega`: no names, sysvars, programs (addresses in topics)                               |
+| `--rega-poll-interval`      |       | number  | 30                               | seconds; 0 = off (H-10)                                                                      |
+| `--rega-poll-trigger`       |       | string  | —                                | `<channel>.<datapoint>` whose event triggers a poll                                          |
+| `--name-file`               | `-m`  | string  | —                                | JSON `{address: name}` overriding ReGa names (2.5's `--json-name-table`), `file: {…}` for she |
+| `--hm-payload`              |       | boolean | true                             | `hm` block in status payloads (H-2)                                                          |
+| `--plain-tree`              |       | string  | —                                | e.g. `state` (H-4)                                                                           |
+| `--publish-cache`           |       | boolean | false                            | H-11                                                                                         |
+| `--publish-counters`        |       | boolean | true                             | H-14                                                                                         |
+| `--duty-cycle-interval`     |       | number  | 90                               | seconds; 0 = off                                                                             |
+| `--rpc-topics`              |       | boolean | false                            | H-13                                                                                         |
+| `--state-dir`               |       | string  | `$STATE_DIRECTORY` or `~/.hm2mqtt` | H-8                                                                                        |
+
+Dropped from 2.5: `--insecure` (→ `--ccu-insecure` for the CCU; broker CA via `--mqtt-tls-ca`),
+`--mqtt-retain` (retain rules are the convention's), `--disable-rega` (→ `--no-rega`),
+`--publish-metadata`, `--hmip-reconnect-interval` (folded into the per-interface ping timeout).
+
+---
+
+## 6. Prerequisites — sibling libs and the core
+
+### 6.1 mqtt-interfaces-core 0.7.0 — done 2026-08-27 (tag `v0.7.0`)
+
+- **G-4 — extra fields in a status payload.** `pubStatus(item, val, {retain, extra})` merges
+  `extra` into the JSON payload (`{val, ts, lc, ...extra}`), ignored with `--no-json-payloads`;
+  `StatusTracker` keeps `extra` so `republishStatus()` re-publishes it. Change detection stays on
+  `val` only. Unit test: publish with `extra`, reconnect, assert the re-publish carries it.
+- **G-5 — device-side timestamps.** `pubStatus(item, val, {ts, lc})` overrides the tracker's
+  clock for values that carry their own timestamp (sysvars, `getValues` cache; also useful for
+  cul2mqtt's learned intervals). Default unchanged.
+- **G-6 — subscriptions outside `<name>/set/#`.** `createAdapter({subscriptions: {'paramset/#':
+  handler, 'rpc/+/+/+': handler}})` subscribes `<name>/<pattern>` on every (re)connect and routes
+  matching messages to the handler `(parts, value, topic, raw)` with the same error handling as
+  `onSet`; today such topics hit `log.warn('mqtt ignoring unexpected topic')` on every message.
+  (The `set/rega/sync` command needs nothing: it is a normal `onSet` branch.)
+- Nice-to-have, not blocking: `info` refresh — `publishInfo()` is already public; the adapter calls
+  it when the device count changes.
+
+### 6.2 homematic-rega 2.0 — done 2026-08-27 (tag `v2.0.0`)
+
+Used by node-red-contrib-ccu 3.4 (1.5.2, 2022): depends on `request` (deprecated), callbacks,
+CJS. 2.0: ESM + promise API, `fetch` (Node ≥ 20), keep ISO-8859-1 decoding (`iconv-lite`), TLS
+(`https`, port 48181) and basic auth, the script set (`getChannels`, `getRooms`, `getFunctions`,
+`getValues`, `getVariables`, `getPrograms`, `exec` with `objects`), timeouts. Timestamps are
+returned as strings in CCU local time — convert them to epoch ms *in the lib* (node-red did
+`new Date(ts + ' UTC+' + offset)` at every call site). Published to npm before hm2mqtt 3.0 is
+tagged; `file:../homematic-rega` while developing (`deploy.sh` ships `file:` deps).
+_Result_: 2.0.0 has zero runtime dependencies (Node's `latin1` replaces iconv-lite, a small parser
+replaces xml2js, `http`/`https` replace request), `timeZone`/`timeout`/`webPort` options, `ts` in
+ms (`0` = never), exported `parseResponse`/`parseTimestamp`/`unescapeLatin1`, 12 unit tests
+against a mock `rega.exe`.
+
+### 6.3 homematic-xmlrpc 2.0 — done 2026-08-27 (tag `v2.0.0`)
+
+1.0.2 (2022) depends on `xmlbuilder` **as a GitHub tarball** (`hobbyquaker/xmlbuilder-js` commit)
+— fragile for `npm ci` and provenance builds. Minimum: pin a published `xmlbuilder`/`xmlbuilder2`
+release or inline the tiny part that was patched; expose `server.close()` and an `error` event so
+the adapter does not reach into `httpServer` (node-red's TODO). ESM is optional — CJS imports fine.
+_Result_: 2.0.0 replaces xmlbuilder with a built-in writer (`lib/xmlbuilder.js`, expanded empty
+elements as the CCU needs them — the reason for the fork), `sax ^1.4`, Node ≥ 20, server `error`
++ `listening` events, promise-returning `close()`; the vows suite (171 tests) is green again and
+runs in CI.
+
+### 6.4 binrpc 3.3.1
+
+Works as is (CJS, `binary` + `put`). Same TODO as above (`close()`, `error` event on the server
+object). A 4.0 without `binary`/`put` (both unmaintained) is a separate, later job.
+
+### 6.5 hm-simulator
+
+0.1.1 simulates rfd (binrpc 2001) and hmipserver (xmlrpc 2010): `init`, `ping`,
+`system.listMethods`, `getParamsetDescription`, outgoing `listDevices`/`newDevices`/`event`/
+`system.multicall`. Enough for the e2e test of the RPC layer (§8); add `putParamset`/`setValue`
+echo and a fake ReGa (`/rega.exe` answering the six scripts from fixtures) if the ReGa layer is to
+be covered end-to-end — otherwise ReGa stays unit-tested with recorded responses.
+
+---
+
+## 7. Implementation steps
+
+Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, `lib/`,
+`test/*.test.js`, `Dockerfile`, `deploy.sh`, eslint/prettier, CI + release workflows, `AGENTS.md`.
+`package.json`: `"type": "module"`, `files` incl. `paramsets.json` seed and `example-names.json`,
+`mqttInterfaces: {spec: '2.0', envPrefix: 'HM2MQTT', needs: ['network'], serviceExtra: []}`.
+
+1. ~~**Core 0.7.0** (G-4, G-5, G-6) with tests, published. **homematic-rega 2.0** published.
+   homematic-xmlrpc dependency fix published.~~ — done 2026-08-27 (§6).
+2. **`lib/interfaces.js`** — the interface table (H-6/H-7: names, ports local/remote/TLS,
+   protocol, path, init/ping flags, ping timeout) as data; `probeInterfaces(host)` for
+   `--interfaces auto`.
+3. **`lib/rpc.js`** — one `RpcConnection` per interface: client (binrpc/xmlrpc, TLS, auth),
+   shared callback servers per protocol, `init`/de-init, init id `hm2mqtt_<name>_<iface>`
+   (iface parsed back from it), `rpcCheckInit` (ping/re-init timers, `lastEvent`), incoming
+   methods (`system.listMethods`, `system.multicall`, `event`, `listDevices`, `newDevices`,
+   `deleteDevices`, `updateDevice`, `replaceDevice`, `readdedDevice`, `setReadyConfig`),
+   `methodCall()` with the deferred queue while a client is missing, tx/rx counters, `emit`s
+   `event`, `devices`, `connected`. No MQTT, no naming — testable with a fake server.
+4. **`lib/metadata.js`** — device table + paramset descriptions: persistence in the state dir
+   (H-8), seed loading, `paramsetName()` key, the throttled `getParamsetDescription` queue
+   (200 ms), `listDevicesAnswer()` per interface incl. the HmIP-RCV-50 / empty-string
+   workarounds, `findIface(address)`.
+5. **`lib/rega.js`** — names/rooms/functions/groups, sysvars/programs with change detection
+   (`updateRegaVariable` semantics: `ts`-based, `valuePrevious`, `lc`), `getValues` cache
+   (RSSI `-256`, `uncertain`), `setVariable`/`programActive`/`programExecute`, poll loop with
+   `pending` guard, `--rega-poll-trigger`, deferral of `setVariable` until variables are known.
+6. **`lib/message.js`** — pure: `createMessage()` port (§1.4 fields, `change`, `lc`,
+   `valueStable`, `working`/`direction` derivation, wait-for-working rule), sysvar/program
+   messages, `_NOTWORKING` derivation. This is where the payload compatibility is unit-tested
+   against fixtures recorded from the flow (§8).
+7. **`lib/topics.js`** — pure: item names from messages (H-3 sanitising, reserved levels),
+   resolution of `set`/`paramset` topics to `{iface, address, datapoint}` or `{sysvar}` /
+   `{program}` (name → address via the ReGa table, channel-only for `set`, devices allowed for
+   `paramset`, `/` in names), `rpc` topic parsing.
+8. **`lib/cast.js`** — pure: `paramCast()` + writeable check (H-12), `castSysvar()`.
+9. **`index.js`** — `createAdapter()` wiring: `info`, `onSet` (datapoints, sysvars, programs,
+   `rega/sync`), `subscriptions` (`paramset/#`, `rpc/…` when enabled), `pubStatus` with `extra:
+   {hm}` / `ts` / `retain` per H-2/H-9, plain mirror (H-4), counters + duty cycle timers (H-14),
+   `setDeviceConnected()` from the interface states (H-5), `onShutdown` → de-init all interfaces,
+   close servers, save state; `onMqttConnect` → nothing special (core re-publishes retained items).
+10. **`lib/install.js`**, `Dockerfile` (`VOLUME /data`, `HM2MQTT_STATE_DIR=/data`, host network or
+    `--init-address`), README (options, topics with payload examples, both migration tables, CCU
+    firewall note, she), CHANGELOG `3.0.0`.
+
+---
+
+## 8. Tests
+
+- **Unit** (`node --test`): `message` (fixtures = real messages captured from the flow: subscribe
+  `hm/status/#` on the live broker, save a few hundred payloads as `test/fixtures/flow-*.json`,
+  assert 3.0 produces identical `val`/`hm` fields for the same RPC input), `topics` (names with
+  `/`, spaces, umlauts, reserved levels, set resolution), `cast` (every TYPE, enum names, unknown
+  description), `metadata` (paramset keys, queue, persistence round trip), `rega` (parsing of
+  recorded script output, change detection, timestamps), `rpc` against an in-process fake
+  server (init/ping/re-init timing with fake timers, multicall unpacking, counters), `config`
+  (env, schema, secrets), installer via `deps` hooks.
+- **e2e** (`npm run test:e2e`, not in CI by default): hm-simulator + a local mosquitto, the 2.5
+  scenario (`BidCoS-RF:1 PRESS_SHORT` appears on `hm/status/BidCoS-RF:1/PRESS_SHORT`, a
+  `set` reaches the simulator) written against MQTT instead of log-line regexes.
+- **Parallel run against the real CCU** (§9) is the acceptance test for the drop-in claim.
+
+---
+
+## 9. Cutover
+
+1. Install on the home server as `hm2mqtt@hm3` with `--name hm3` while the flow keeps running
+   (two clients on the CCU are fine — different callback URLs/init ids). Firewall: CCU → host
+   2126/2127.
+2. Run `scripts/compare-trees.js` for a day: subscribes `hm/#` and `hm3/#`, reports items missing
+   on either side and payload differences (`val`, and every `hm.*` field). Expected diffs: none
+   in `val`/`hm.*`, `ts` jitter, `connected` semantics (H-5), counters (`{val}` vs plain).
+3. Verify: `set` on a switch/dimmer/blind/thermostat and a sysvar/program from she; `paramset` on
+   a thermostat MASTER; `maintenance/set/restart` comes back; CCU reboot → interfaces re-init and
+   `connected` 1 → 2; she Services page shows the instance with a sensible config form.
+4. Switch: disable the two `ccu-mqtt` nodes and the duty-cycle inject in Node-RED (keep the tab
+   for a while), `--uninstall --name hm3`, `--install --name hm` (`--plain-tree state` only if
+   OQ-43 says so). Clear retained leftovers that 3.0 does not produce (`hm/status//…` from unnamed
+   channels, `hm/state/#` once unused) with `mosquitto_sub`/`mosquitto_pub -r -n`.
+5. Tag `v3.0.0` (release workflow), README/CHANGELOG, master roadmap inventory line.
+
+---
+
+## 10. After 3.0
+
+- **3.1 — Home Assistant discovery** (H-15, D-5): one HA device per Homematic device (bridge =
+  the CCU, `via_device`), availability = `<name>/connected` + `interface/<iface>/connected`,
+  entity mapping by channel type: `SWITCH`/`*_VIRTUAL_RECEIVER` → `switch`, `DIMMER*` → `light`
+  (brightness), `BLIND`/`SHUTTER`/`JALOUSIE` → `cover`, `HEATING_CLIMATECONTROL_TRANSCEIVER`/
+  `CLIMATECONTROL_RT_TRANSCEIVER`/`THERMALCONTROL_TRANSMIT` → `climate`, `SHUTTER_CONTACT`/
+  `ROTARY_HANDLE_SENSOR`/`MOTION_DETECTOR`/`SMOKE_DETECTOR` → `binary_sensor`, `WEATHER*`/
+  `POWERMETER`/`*_TRANSMITTER` numeric datapoints → `sensor` with unit/`dev_cla`, `KEY`/`*_REMOTE*`
+  → `event`, unknown types → nothing (opt-in `--ha-all-datapoints` for raw sensors). Names from
+  ReGa; rooms as HA `suggested_area`. Value templates `value_json.val`; `ENUM` via `hm.valueEnum`.
+- **`--discover` / `--ccu-address auto`** with `hm-discover` (UDP broadcast, B-2 in the core).
+- **CUxD** end-to-end (binrpc 8701, no ping) and **LINK paramsets** (`paramset/<ch>/<peer>`
+  with `activateLinkParamset`).
+- **Read paramsets**: `<name>/set/paramset/get/<ch>/<paramset>` → `<name>/status/paramset/<ch>/<paramset>`
+  (replaces 2.5's `db/extend` metadata publish, OQ-52).
+- **Drop `--plain-tree`** once nothing consumes `hm/state` (OQ-43); drop `--hm-payload` size by
+  trimming duplicate fields (`hm.ts`/`hm.lc`) when consumers are known (OQ-46) — both are 4.0
+  breaks.
+- binrpc 4.0 / homematic-xmlrpc 2.0 without `binary`/`put`/`sax 0.4`.
+
+---
+
+## 11. Open questions
+
+| ID    | Question                                                                                                                                                                                                                                                                                     | Proposal                                                                                                                                                                        |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-43 | Does anything consume the plain mirror tree `hm/state/…`? (she scripts use `hm//…` = `status`.) `mosquitto_sub -v -t 'hm/state/#'` shows what is retained, not who reads it — check she scripts and any other subscriber (`$SYS`/broker logs).                                                 | Ship `--plain-tree` (H-4), enable it only if a reader is found, remove in 4.0.                                                                                                  |
+| OQ-44 | Run on the home server (H-7) or on the CCU3/RaspberryMatic (as the flow does)? Node ≥ 20 on the CCU3's armv7 RedMatic runtime is not available; RaspberryMatic could run the Docker image but the fleet's systemd/she management would not apply.                                              | Home server.                                                                                                                                                                    |
+| OQ-45 | ReGa polling: the flow has it off (30 s configured). Deliberate (CCU load while Node-RED ran on the CCU itself) or forgotten? Do other Node-RED tabs use `ccu-poll`/`ccu-sysvar` and expect sysvar topics to update?                                                                             | Default 30 s from the home server (H-10); publishes only on change.                                                                                                             |
+| OQ-46 | Which `hm.*` fields are actually read (she `getProp(topic, 'hm', …)`, dashboards)? Decides whether the full block must stay the default (H-2) or `{val, ts, lc}` suffices later.                                                                                                               | Keep the full block for 3.0; grep she scripts before 4.0.                                                                                                                       |
+| OQ-47 | Is Home Assistant in use at all? Decides the priority of 3.1 (§10).                                                                                                                                                                                                                          | Build 3.1 only when needed; the fleet convention is satisfied by the option being present.                                                                                      |
+| OQ-48 | Item names with upper-case datapoints and free-form channel names (spaces, umlauts, `/`) deviate from the fleet's snake_case rule (core README §6). Needs a note in the umbrella spec ("items are the source system's identifiers when that system has stable, user-visible names").             | Accept; add the spec note with 3.0.                                                                                                                                             |
+| OQ-49 | Non-`PRESS_` `ACTION` datapoints non-retained (H-9) — any consumer relying on a retained ACTION value?                                                                                                                                                                                         | Union rule (H-9); the compare run (§9) shows the affected topics.                                                                                                                |
+| OQ-50 | Is a Mosquitto ACL/dynsec role bound to the client id `homematic-ccu3`?                                                                                                                                                                                                                       | Create a dynsec identity for `hm` via she instead; `--mqtt-client-id-prefix` as the fallback (H-17).                                                                            |
+| OQ-51 | 2.5 published `hm.UNIT`; node-red-contrib-ccu's message has no unit. Add `datapointUnit` (from the description, `°C` decoding as in 2.5) to the `hm` block?                                                                                                                                    | Yes — additive, harmless; also needed for HA discovery (3.1).                                                                                                                   |
+| OQ-52 | Replacement for 2.5's `db/extend/<name>/<address>` metadata publish (`--publish-metadata`)? Nothing in the fleet consumes `db/extend` any more.                                                                                                                                              | Drop; `paramset/get` in 3.x (§10) covers the remaining use.                                                                                                                     |
