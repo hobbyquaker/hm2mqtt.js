@@ -202,6 +202,7 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
                 '2',
                 '--plain-tree',
                 'state',
+                '--rpc-topics',
                 '--state-dir',
                 stateDir,
                 '-v',
@@ -235,9 +236,9 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
         await waitTopic('hmtest/status/interface/BidCos-RF/connected', 20000, (m) => json(m).val === true);
         await waitTopic('hmtest/status/interface/HmIP-RF/connected', 20000, (m) => json(m).val === true);
         await waitTopic('hmtest/connected', 20000, (m) => m.raw === '2');
-        const info = await waitTopic('hmtest/info', 20000, (m) => json(m).devices > 0);
+        // rfd announces 52, hmip 39 devices/channels; info is re-published after each newDevices
+        const info = await waitTopic('hmtest/info', 20000, (m) => json(m).devices >= 91);
         assert.deepEqual(json(info).interfaces, ['BidCos-RF', 'HmIP-RF']);
-        assert.ok(json(info).devices >= 90, 'devices: ' + json(info).devices);
     });
 
     test('events carry the hm block, PRESS_* is not retained, plain tree mirrors', {timeout: 30000}, async () => {
@@ -289,6 +290,16 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
         const after = await waitTopic('hmtest/status/Anwesenheit', 15000, (m) => json(m).val === false);
         assert.equal(json(after).hm.change, true);
         assert.equal(json(after).hm.valuePrevious, true);
+    });
+
+    test('rpc topics: method call answered on response/<callid>', {timeout: 30000}, async () => {
+        client.publish('hmtest/rpc/BidCos-RF/system.listMethods/c1', '[]');
+        const r = await waitTopic('hmtest/response/c1', 10000);
+        assert.equal(r.retain, false);
+        assert.ok(json(r).includes('init'));
+        client.publish('hmtest/rpc/Nope/getVersion/c2', '');
+        const e = await waitTopic('hmtest/response/c2', 10000);
+        assert.match(json(e).error, /unknown interface/);
     });
 
     test('unknown targets and unexpected topics are warned, not crashed', {timeout: 30000}, async () => {

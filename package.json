@@ -26,7 +26,7 @@
     "test": "node --test",
     "test:watch": "node --test --watch",
     "deploy": "bash deploy.sh",
-    "test:e2e": "HM2MQTT_E2E=1 node --test test/e2e.test.js"
+    "test:e2e": "HM2MQTT_E2E=1 node --test --test-force-exit test/e2e.test.js"
   },
   "repository": {
     "type": "git",
