@@ -25,7 +25,8 @@
     "format": "prettier --write . && eslint --fix .",
     "test": "node --test",
     "test:watch": "node --test --watch",
-    "deploy": "bash deploy.sh"
+    "deploy": "bash deploy.sh",
+    "test:e2e": "HM2MQTT_E2E=1 node --test test/e2e.test.js"
   },
   "repository": {
     "type": "git",
@@ -74,6 +75,7 @@
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
     "globals": "^16.0.0",
+    "hm-simulator": "^0.1.1",
     "prettier": "^3.0.0"
   }
 }
