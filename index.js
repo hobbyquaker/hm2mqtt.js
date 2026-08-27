@@ -21,7 +21,7 @@ import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
 import {castValue, isWriteable} from './lib/cast.js';
-import {datapointItem, sanitizeName, resolveSet, resolveParamset, plainValue} from './lib/topics.js';
+import {sanitizeName, resolveSet, resolveParamset, plainValue, compileTemplate, ItemIndex} from './lib/topics.js';
 
 handleInstall(config);
 
@@ -124,6 +124,12 @@ const values = new ValueStore({
 });
 values.load();
 
+const renderItem = compileTemplate(config.itemTemplate);
+const renderSysvarItem = compileTemplate(config.sysvarItemTemplate);
+const renderProgramItem = compileTemplate(config.programItemTemplate);
+const itemIndex = new ItemIndex();
+let indexTimer = null;
+
 let enabled = [];
 const connections = {};
 let servers = null;
@@ -146,6 +152,58 @@ function itemOf(name) {
     return item;
 }
 
+function rendered(render, fields, label) {
+    const {name: item, changed} = render(fields);
+    if (changed && !warnedNames.has(label)) {
+        warnedNames.add(label);
+        log.warn('item of', label, 'rendered with replacements as', JSON.stringify(item));
+    }
+    return item;
+}
+
+/**
+ * Rebuilds the reverse map item → target for set topics: every VALUES parameter of every known
+ * channel rendered with the item template (plus its address form), variables and programs.
+ */
+function rebuildIndex() {
+    indexTimer = null;
+    itemIndex.clear('datapoint');
+    itemIndex.collisions.clear();
+    for (const iface of Object.keys(metadata.devices)) {
+        for (const [address, device] of Object.entries(metadata.devices[iface])) {
+            if (!device.PARENT) {
+                continue;
+            }
+            const description = metadata.description(iface, address, 'VALUES');
+            if (!description) {
+                continue;
+            }
+            for (const datapoint of Object.keys(description)) {
+                const target = {kind: 'datapoint', address, datapoint};
+                itemIndex.add(renderItem(values.fields(iface, address, datapoint)).name, target);
+                itemIndex.add(`${address}/${datapoint}`, target);
+            }
+        }
+    }
+    if (itemIndex.collisions.size > 0) {
+        const list = [...itemIndex.collisions.keys()];
+        log.warn(
+            'items shared by several channels (the first one wins on set):',
+            list.slice(0, 10).join(', '),
+            list.length > 10 ? `… ${list.length - 10} more` : '',
+        );
+    }
+    log.debug('item index rebuilt:', itemIndex.size, 'items');
+}
+
+function scheduleIndex() {
+    if (indexTimer) {
+        return;
+    }
+    indexTimer = setTimeout(rebuildIndex, 2000);
+    indexTimer.unref();
+}
+
 function publishPlain(item, value, retain) {
     if (config.plainTree) {
         adapter.publish(adapter.topic(config.plainTree, item), plainValue(value), {retain});
@@ -153,14 +211,16 @@ function publishPlain(item, value, retain) {
 }
 
 function publishMessage(message, {retain = true} = {}) {
-    const item = datapointItem(itemOf(message.channelName || message.channel), message.datapoint);
+    const item = rendered(renderItem, message, message.datapointName);
     const extra = config.hmPayload ? {hm: hmBlock(message)} : undefined;
     pubStatus(item, message.value, {retain, extra, ts: message.ts, lc: message.lc});
     publishPlain(item, message.value, retain);
 }
 
 function publishRega(message) {
-    const item = itemOf(message.name);
+    const render = message.type === 'PROGRAM' ? renderProgramItem : renderSysvarItem;
+    const item = rendered(render, message, `${message.type} ${message.name}`);
+    itemIndex.add(item, {kind: message.type === 'PROGRAM' ? 'program' : 'sysvar', name: message.name});
     const extra = config.hmPayload ? {hm: hmBlock(message)} : undefined;
     pubStatus(item, message.value, {retain: true, extra, ts: message.ts, lc: message.lc});
     publishPlain(item, message.value, true);
@@ -300,7 +360,8 @@ async function handleSet(parts, value, topic) {
         log.warn('mqtt ignoring empty payload on', topic);
         return;
     }
-    const target = resolveSet(parts, lookup);
+    // exact item first (rendered template, address form, variables, programs), then the positional form
+    const target = itemIndex.get(parts.join('/')) || resolveSet(parts, lookup);
     if (!target) {
         throw new Error('unknown channel, variable or program');
     }
@@ -378,7 +439,8 @@ function fetchDescriptions(iface, addresses) {
     const conn = connections[iface];
     fetchChain = fetchChain
         .then(() => metadata.fetchDescriptions(iface, (method, params) => conn.methodCall(method, params), {addresses}))
-        .catch((err) => log.warn(iface, 'fetching paramset descriptions failed:', err.message));
+        .catch((err) => log.warn(iface, 'fetching paramset descriptions failed:', err.message))
+        .then(scheduleIndex);
     return fetchChain;
 }
 
@@ -488,6 +550,7 @@ function createConnection(iface) {
         const deleted = metadata.deleteDevices(iface, addresses);
         log.info(iface, 'deleteDevices:', deleted.length, 'removed');
         adapter.publishInfo();
+        scheduleIndex();
     });
     return conn;
 }
@@ -518,6 +581,7 @@ async function startRega() {
             duplicates.length > 20 ? '…' : '',
         );
     }
+    regaSync.on('names', scheduleIndex);
     regaSync.on('sysvar', publishRega);
     regaSync.on('program', publishRega);
     regaSync.on('polled', () => {
@@ -601,6 +665,7 @@ async function start() {
     if (regaSync) {
         await startRega();
     }
+    rebuildIndex();
     await Promise.all(enabled.map((iface) => connections[iface].start()));
     updateConnected();
     adapter.publishInfo();

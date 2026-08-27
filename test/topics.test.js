@@ -1,7 +1,16 @@
 import {test, describe} from 'node:test';
 import assert from 'node:assert/strict';
 
-import {sanitizeName, datapointItem, resolveSet, resolveParamset, plainValue} from '../lib/topics.js';
+import {
+    sanitizeName,
+    datapointItem,
+    resolveSet,
+    resolveParamset,
+    plainValue,
+    compileTemplate,
+    ItemIndex,
+    DEFAULT_ITEM_TEMPLATE,
+} from '../lib/topics.js';
 
 describe('names', () => {
     test('sanitizeName keeps names verbatim except +, #, empty levels and reserved first levels', () => {
@@ -77,5 +86,55 @@ describe('resolveSet', () => {
         assert.equal(plainValue(false), 0);
         assert.equal(plainValue(21.5), 21.5);
         assert.equal(plainValue('x'), 'x');
+    });
+});
+
+describe('item templates', () => {
+    const fields = {
+        channelName: 'Licht Küche',
+        channel: 'ABC:1',
+        device: 'ABC',
+        channelIndex: 1,
+        datapoint: 'STATE',
+        iface: 'BidCos-RF',
+        rooms: ['Küche'],
+        room: 'Küche',
+    };
+
+    test('default template renders the classic item, fallbacks and case-insensitive fields', () => {
+        const render = compileTemplate(DEFAULT_ITEM_TEMPLATE);
+        assert.deepEqual(render(fields), {name: 'Licht Küche/STATE', changed: false});
+        assert.deepEqual(render({...fields, channelName: undefined}), {name: 'ABC:1/STATE', changed: false});
+        assert.equal(compileTemplate('${CHANNELNAME}/${DataPoint}')(fields).name, 'Licht Küche/STATE');
+        assert.equal(compileTemplate('${device}/${channelIndex}/${datapoint}')(fields).name, 'ABC/1/STATE');
+        assert.equal(compileTemplate('${room|_}/${channelName}/${datapoint}')(fields).name, 'Küche/Licht Küche/STATE');
+        assert.equal(
+            compileTemplate('${function|room}/${channelName}')({...fields, rooms: [], room: undefined}).name,
+            '_/Licht Küche',
+        );
+        assert.equal(compileTemplate('${rooms}/${datapoint}')({...fields, rooms: ['a', 'b']}).name, 'a,b/STATE');
+        assert.equal(compileTemplate('hm/${datapoint}')(fields).name, 'hm/STATE');
+        assert.equal(compileTemplate('${name}')({name: 'Anwesenheit'}).name, 'Anwesenheit');
+        assert.deepEqual(compileTemplate('${channelName}/${datapoint}')({channelName: 'a+b', datapoint: 'X'}), {
+            name: 'a_b/X',
+            changed: true,
+        });
+        assert.equal(compileTemplate('counter/${datapoint}')(fields).name, 'counter_/STATE');
+    });
+
+    test('ItemIndex: first target wins, collisions recorded, clear by kind', () => {
+        const index = new ItemIndex();
+        assert.equal(index.add('Licht/STATE', {kind: 'datapoint', address: 'A:1', datapoint: 'STATE'}), true);
+        assert.equal(index.add('Licht/STATE', {kind: 'datapoint', address: 'A:1', datapoint: 'STATE'}), true);
+        assert.equal(index.add('Licht/STATE', {kind: 'datapoint', address: 'B:1', datapoint: 'STATE'}), false);
+        assert.deepEqual(index.get('Licht/STATE'), {kind: 'datapoint', address: 'A:1', datapoint: 'STATE'});
+        assert.equal(index.collisions.size, 1);
+        index.add('Anwesenheit', {kind: 'sysvar', name: 'Anwesenheit'});
+        assert.equal(index.size, 2);
+        index.clear('datapoint');
+        assert.equal(index.get('Licht/STATE'), undefined);
+        assert.deepEqual(index.get('Anwesenheit'), {kind: 'sysvar', name: 'Anwesenheit'});
+        index.clear();
+        assert.equal(index.size, 0);
     });
 });

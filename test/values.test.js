@@ -131,6 +131,17 @@ describe('ValueStore', () => {
         });
     });
 
+    test('fields() are the static part of the message', () => {
+        const s = store();
+        const f = s.fields('BidCos-RF', 'ABC:1', 'LEVEL');
+        assert.equal(f.channelName, 'Licht Flur');
+        assert.equal(f.deviceType, 'HM-LC-Dim1L-CV');
+        assert.equal(f.datapointControl, 'DIMMER.LEVEL');
+        assert.equal(f.room, 'Flur');
+        assert.equal(f.value, undefined);
+        assert.equal(f.ts, undefined);
+    });
+
     test('change / lc / valuePrevious across events; ACTION always changes; ENUM names', () => {
         const timers = fakeTimers();
         const s = store(timers);

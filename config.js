@@ -1,6 +1,7 @@
 import {parseConfig} from 'mqtt-interfaces-core';
 import pkg from './package.json' with {type: 'json'};
 import {DEFAULT_INTERFACES, INTERFACE_NAMES} from './lib/interfaces.js';
+import {DEFAULT_ITEM_TEMPLATE, DEFAULT_SYSVAR_ITEM_TEMPLATE, DEFAULT_PROGRAM_ITEM_TEMPLATE} from './lib/topics.js';
 
 export const OPTIONS = {
     'ccu-address': {alias: 'a', type: 'string', describe: 'hostname or ip of the CCU', demandOption: true},
@@ -63,6 +64,18 @@ export const OPTIONS = {
             describe: 'device and channel names',
         },
     },
+    'item-template': {
+        type: 'string',
+        describe:
+            'item (topic part after status/ and set/) of a datapoint; ${field} placeholders with | fallbacks, every hm field',
+        default: DEFAULT_ITEM_TEMPLATE,
+    },
+    'sysvar-item-template': {
+        type: 'string',
+        describe: 'item of a system variable',
+        default: DEFAULT_SYSVAR_ITEM_TEMPLATE,
+    },
+    'program-item-template': {type: 'string', describe: 'item of a program', default: DEFAULT_PROGRAM_ITEM_TEMPLATE},
     'hm-payload': {type: 'boolean', describe: 'add the "hm" meta data block to every status payload', default: true},
     'plain-tree': {
         type: 'string',
