@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+
+- Home Assistant discovery (ROADMAP §13): one HA device per Homematic device, roles from the
+  paramset descriptions' `CONTROL` hints (switch, light, cover with tilt, climate for HM and HmIP
+  thermostats, lock, event per key, contact/motion/smoke/water/presence sensors, energy and
+  weather sensors, maintenance diagnostics) plus generic entities for every other datapoint
+  (disabled by default, `--no-ha-generic`); availability from the bridge and `UNREACH`,
+  `suggested_area` from the room. HmIP virtual receivers: first receiver controls, transmitter
+  provides the state, receivers 2/3 disabled.
+- `set/<channel>/LEVEL` accepts `OPEN`/`CLOSE`/`STOP`/`ON`/`OFF`; HM thermostats accept
+  `set/<channel>/CONTROL_MODE` with `AUTO-MODE`/`MANU-MODE`/`BOOST-MODE`/`COMFORT-MODE`/
+  `LOWERING-MODE`; key presses are also published as `status/<channel>/PRESS` (not retained).
+- `--ignore` globs on `<interface>.<channel>.<datapoint>` (B-4).
+
 ## 3.1.0
 
 ### Changed

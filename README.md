@@ -71,6 +71,8 @@ so the CCU can call back. `--restart unless-stopped` brings it back after `maint
 | `--publish-cache`                                                                                                                            | off                                               | publish every datapoint value known to the ReGa at start (thousands of retained messages)                          |
 | `--publish-counters`, `--duty-cycle-interval`                                                                                                | on, 90                                            | rpc rx/tx counters and `listBidcosInterfaces` duty cycle polling (0 = off)                                         |
 | `--rpc-topics`                                                                                                                               | off                                               | arbitrary rpc calls via MQTT — an unrestricted API surface, only on a trusted broker                               |
+| `--ignore`                                                                                                                                   | —                                                 | comma separated globs on `<interface>.<channel>.<datapoint>` not to publish, e.g. `*.*.RSSI_*,HmIP-RF.*.*_STATUS`  |
+| `--ha-generic` / `--no-ha-generic`                                                                                                           | on                                                | announce datapoints without a role as (disabled) generic entities ([Home Assistant](#home-assistant))              |
 | `--state-dir`                                                                                                                                | `$STATE_DIRECTORY` or `~/.hm2mqtt`                | devices, paramset descriptions, names and last values                                                              |
 | `-u, --mqtt-url`, `--mqtt-username`, `--mqtt-password`, `--mqtt-tls-ca`, `-n, --name`, `--json-payloads`, `--maintenance`, `-v, --verbosity` | core                                              | shared options of every adapter; `--name` (default `hm`) is the topic prefix                                       |
 
@@ -179,8 +181,37 @@ address as well.
 
 ## Home Assistant
 
-The core's discovery options (`--ha-discovery`, `--ha-prefix`) exist, but 3.0 does not announce
-devices yet — channel-type to entity mapping is planned for 3.1 (ROADMAP §10).
+Device-based MQTT discovery (`homeassistant/device/<id>/config`, HA ≥ 2024.11) is on by default
+(`--no-ha-discovery` clears it, `--ha-prefix` changes the prefix). One HA device per Homematic
+device (manufacturer eQ-3, model = device type, `via_device` = the CCU bridge device,
+`suggested_area` = the room when all channels sit in one room), available while `<name>/connected`
+is `2` **and** the device's `UNREACH` is false.
+
+Entities are derived from the paramset descriptions, not from a device list — every device the
+CCU knows works: the `CONTROL` hint of a channel's primary datapoint decides the role
+(`SWITCH.STATE`, `DIMMER.LEVEL`, `BLIND.LEVEL`, `DOOR_SENSOR.STATE`, `HEATING_CONTROL(_HMIP).SETPOINT`,
+`LOCK.STATE`, `BUTTON.SHORT`, …), the channel type covers the older HM devices.
+
+| role                                                   | entity                                                                                                                                        |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| switch (HM `SWITCH`, HmIP `*_VIRTUAL_RECEIVER`)        | `switch`; HmIP: state from the `SWITCH_TRANSMITTER` channel, first receiver enabled, receivers 2/3 disabled by default                        |
+| dimmer                                                 | `light` with brightness (`LEVEL` 0..1 ↔ 0..100 %)                                                                                             |
+| blind / shutter                                        | `cover` with position, `STOP`, tilt (`LEVEL_2`) when present, opening/closing from `DIRECTION`/`ACTIVITY_STATE`                               |
+| thermostat (HM and HmIP)                               | `climate`: setpoint, current temperature/humidity, modes `auto`/`heat`, preset `boost` (HM also `comfort`/`eco`), action                      |
+| contact, rotary handle, motion, presence, smoke, water | `binary_sensor` with device class (rotary handle also a `closed/tilted/open` sensor)                                                          |
+| key                                                    | `event` per key channel with `press_short`, `press_long`, … (from the aggregate `<channel>/PRESS` item)                                       |
+| lock (KEYMATIC)                                        | `lock`                                                                                                                                        |
+| energy meter, weather                                  | `sensor`s with device/state classes and units                                                                                                 |
+| maintenance (`:0`)                                     | `LOW_BAT` battery sensor enabled; `RSSI_*`, `OPERATING_VOLTAGE`, `UNREACH`, `DUTY_CYCLE`, … diagnostic, disabled                              |
+| everything else                                        | generic `sensor`/`binary_sensor`/`switch`/`select`/`number`/`button` from the description, disabled by default (`--no-ha-generic` drops them) |
+
+The entities use the normal topics; three small additions make HA's single-topic conventions work:
+`set/<channel>/LEVEL` accepts `OPEN`, `CLOSE`, `STOP`, `ON` (restore last level) and `OFF`; HM
+thermostats accept `set/<channel>/CONTROL_MODE` with `AUTO-MODE`, `MANU-MODE`, `BOOST-MODE`,
+`COMFORT-MODE`, `LOWERING-MODE` (translated to the mode actions); every key press is also
+published as `status/<channel>/PRESS` (`val` = `PRESS_SHORT` etc., not retained). `--ignore`
+keeps datapoints out of both MQTT and discovery. Not covered yet: RGBW/colour lights, sirens,
+garage doors, variables/programs as entities.
 
 ## Migration
 
