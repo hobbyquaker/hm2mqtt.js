@@ -77,11 +77,32 @@ if (config.nameFile) {
     nameFile = JSON.parse(fs.readFileSync(path.resolve(config.nameFile), 'utf8'));
 }
 
+/*
+ * payload format (node-red-contrib-ccu's mqsh-extended / mqsh-basic / plain)
+ */
+let payloadFormat = config.payload;
+if (config.hmPayload === false && payloadFormat === 'mqsh-extended') {
+    payloadFormat = 'mqsh-basic';
+}
+if (!config.jsonPayloads) {
+    payloadFormat = 'plain';
+}
+config.jsonPayloads = payloadFormat !== 'plain';
+const withHm = payloadFormat === 'mqsh-extended';
+/** the value as published: plain format uses node-red's 0/1 for booleans */
+const outValue = (value) => (payloadFormat === 'plain' ? plainValue(value) : value);
+
 const adapter = createAdapter({
     pkg,
     config,
     deviceLabel: 'ccu',
-    info: () => ({ccu: host, interfaces: enabled, devices: metadata.count(), rega: Boolean(regaSync)}),
+    info: () => ({
+        ccu: host,
+        interfaces: enabled,
+        devices: metadata.count(),
+        rega: Boolean(regaSync),
+        payload: payloadFormat,
+    }),
     onSet: handleSet,
     subscriptions: {
         'paramset/#': handleParamset,
@@ -212,8 +233,8 @@ function publishPlain(item, value, retain) {
 
 function publishMessage(message, {retain = true} = {}) {
     const item = rendered(renderItem, message, message.datapointName);
-    const extra = config.hmPayload ? {hm: hmBlock(message)} : undefined;
-    pubStatus(item, message.value, {retain, extra, ts: message.ts, lc: message.lc});
+    const extra = withHm ? {hm: hmBlock(message)} : undefined;
+    pubStatus(item, outValue(message.value), {retain, extra, ts: message.ts, lc: message.lc});
     publishPlain(item, message.value, retain);
 }
 
@@ -221,13 +242,13 @@ function publishRega(message) {
     const render = message.type === 'PROGRAM' ? renderProgramItem : renderSysvarItem;
     const item = rendered(render, message, `${message.type} ${message.name}`);
     itemIndex.add(item, {kind: message.type === 'PROGRAM' ? 'program' : 'sysvar', name: message.name});
-    const extra = config.hmPayload ? {hm: hmBlock(message)} : undefined;
-    pubStatus(item, message.value, {retain: true, extra, ts: message.ts, lc: message.lc});
+    const extra = withHm ? {hm: hmBlock(message)} : undefined;
+    pubStatus(item, outValue(message.value), {retain: true, extra, ts: message.ts, lc: message.lc});
     publishPlain(item, message.value, true);
 }
 
 function publishItem(item, value, {retain = true} = {}) {
-    pubStatus(item, value, {retain});
+    pubStatus(item, outValue(value), {retain});
     publishPlain(item, value, retain);
 }
 

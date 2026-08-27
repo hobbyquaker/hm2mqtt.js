@@ -76,7 +76,14 @@ export const OPTIONS = {
         default: DEFAULT_SYSVAR_ITEM_TEMPLATE,
     },
     'program-item-template': {type: 'string', describe: 'item of a program', default: DEFAULT_PROGRAM_ITEM_TEMPLATE},
-    'hm-payload': {type: 'boolean', describe: 'add the "hm" meta data block to every status payload', default: true},
+    payload: {
+        type: 'string',
+        describe:
+            'status payload format: mqsh-extended ({val, ts, lc, hm}), mqsh-basic ({val, ts, lc}) or plain (value only, booleans as 0/1)',
+        choices: ['plain', 'mqsh-basic', 'mqsh-extended'],
+        default: 'mqsh-extended',
+    },
+    'hm-payload': {type: 'boolean', describe: 'deprecated: --no-hm-payload = --payload mqsh-basic', hidden: true},
     'plain-tree': {
         type: 'string',
         describe: 'additionally publish plain payloads under <name>/<level>/... (e.g. "state")',

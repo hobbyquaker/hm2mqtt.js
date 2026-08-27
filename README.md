@@ -66,7 +66,7 @@ so the CCU can call back. `--restart unless-stopped` brings it back after `maint
 | `-m, --name-file`                                                                                                                            | —                                                 | JSON `{address: name}` overriding ReGa names ([example-names.json](example-names.json))                            |
 | `--item-template`, `--sysvar-item-template`, `--program-item-template`                                                                       | `${channelName\|channel}/${datapoint}`, `${name}` | how items (topic parts) are built, see [Item templates](#item-templates)                                           |
 | `--rega-names-interval`                                                                                                                      | 3600                                              | seconds between re-reads of names/rooms/functions (0 = only at start and on `set/rega/sync`)                       |
-| `--hm-payload` / `--no-hm-payload`                                                                                                           | on                                                | the `hm` meta data block in status payloads ([Payloads](#payloads))                                                |
+| `--payload`                                                                                                                                  | `mqsh-extended`                                   | status payload format: `mqsh-extended`, `mqsh-basic` or `plain` ([Payloads](#payloads))                            |
 | `--plain-tree <level>`                                                                                                                       | —                                                 | additionally publish plain payloads under `<name>/<level>/…` (the second `ccu-mqtt` node of the Node-RED flow)     |
 | `--publish-cache`                                                                                                                            | off                                               | publish every datapoint value known to the ReGa at start (thousands of retained messages)                          |
 | `--publish-counters`, `--duty-cycle-interval`                                                                                                | on, 90                                            | rpc rx/tx counters and `listBidcosInterfaces` duty cycle polling (0 = off)                                         |
@@ -165,9 +165,10 @@ meta data block of node-red-contrib-ccu's messages, field for field:
 `ENUM` datapoints carry `datapointEnum` (the value list) and `valueEnum` (the name of the current
 value). Variables have `type: "SYSVAR"` with `valueType`, `unit`, `enum`, `valueEnum`, `id` and —
 when bound to a channel — the channel fields; programs `type: "PROGRAM"` with `active`,
-`activePrevious`, `ts` (last execution). `--no-hm-payload` leaves `{val, ts, lc}`,
-`--no-json-payloads` publishes the bare value. `--plain-tree state` mirrors every item to
-`<name>/state/…` with plain values and booleans as `0`/`1`.
+`activePrevious`, `ts` (last execution). `--payload` selects the format the way the `ccu-mqtt` node did:
+`mqsh-extended` (default, as above), `mqsh-basic` (`{val, ts, lc}`) or `plain` (the bare value,
+booleans as `0`/`1`). `--plain-tree state` additionally mirrors every item to `<name>/state/…` in
+the plain format (the second `ccu-mqtt` node of a flow).
 
 ## Names
 

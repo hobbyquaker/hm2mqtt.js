@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.0
+
+### Changed
+
+- `--payload plain|mqsh-basic|mqsh-extended` (default `mqsh-extended`) selects the status payload
+  format like the `ccu-mqtt` node's payload option; `plain` publishes booleans as `0`/`1`.
+  `--no-hm-payload` still works as an alias of `--payload mqsh-basic` but is hidden and deprecated.
+  `<name>/info` reports the format as `payload`.
+
 ## 3.0.0
 
 Rewrite on [mqtt-interfaces-core](https://github.com/hobbyquaker/mqtt-interfaces-core) as a
