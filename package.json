@@ -78,5 +78,10 @@
     "globals": "^16.0.0",
     "hm-simulator": "^0.1.1",
     "prettier": "^3.0.0"
+  },
+  "overrides": {
+    "hm-simulator": {
+      "homematic-xmlrpc": "^2.0.0"
+    }
   }
 }
