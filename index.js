@@ -28,6 +28,7 @@ handleInstall(config);
 const COUNTER_INTERVAL_MS = 30000;
 const VALUES_SAVE_MS = 300000;
 const SET_THROTTLE_MS = 500;
+const DEVICES_WAIT_MS = 10000;
 const STOP_TIMEOUT_MS = 1500;
 const RESOLVE_RETRY_MS = 10000;
 
@@ -377,7 +378,39 @@ function fetchDescriptions(iface, addresses) {
     return fetchChain;
 }
 
+/**
+ * Right after init() the CCU pushes events before it announces its devices (newDevices). On a
+ * first start (empty state) those events would lack device/channel/datapoint fields, so they
+ * are held per interface until the devices are known (or 10 s passed).
+ */
+const heldEvents = {};
+
+function holdEvent(iface, event) {
+    if (!heldEvents[iface]) {
+        return false;
+    }
+    heldEvents[iface].push(event);
+    return true;
+}
+
+function releaseEvents(iface) {
+    const held = heldEvents[iface];
+    if (!held) {
+        return;
+    }
+    delete heldEvents[iface];
+    if (held.length > 0) {
+        log.debug(iface, 'releasing', held.length, 'events held until the devices were known');
+    }
+    for (const event of held) {
+        onEvent(iface, event);
+    }
+}
+
 function onEvent(iface, event) {
+    if (holdEvent(iface, event)) {
+        return;
+    }
     if (config.regaPollTrigger && regaSync && `${event.channel}.${event.datapoint}` === config.regaPollTrigger) {
         regaSync.poll().catch((err) => log.warn('rega poll failed:', err.message));
     }
@@ -420,6 +453,10 @@ function createConnection(iface) {
         publishItem(`interface/${iface}/connected`, connected);
         updateConnected();
         if (connected) {
+            if (metadata.count(iface) === 0 && !heldEvents[iface]) {
+                heldEvents[iface] = [];
+                setTimeout(() => releaseEvents(iface), DEVICES_WAIT_MS).unref();
+            }
             fetchDescriptions(iface);
         }
     });
@@ -437,8 +474,10 @@ function createConnection(iface) {
             'known )',
         );
         if (added.length > 0) {
-            fetchDescriptions(iface, added);
+            fetchDescriptions(iface, added).then(() => releaseEvents(iface));
             adapter.publishInfo();
+        } else {
+            releaseEvents(iface);
         }
     });
     conn.on('deleteDevices', (addresses) => {
