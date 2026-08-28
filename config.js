@@ -1,6 +1,7 @@
 import {parseConfig} from 'mqtt-interfaces-core';
 import pkg from './package.json' with {type: 'json'};
 import {DEFAULT_INTERFACES, INTERFACE_NAMES} from './lib/interfaces.js';
+import {discoveryHint} from './lib/discovery.js';
 import {DEFAULT_ITEM_TEMPLATE, DEFAULT_SYSVAR_ITEM_TEMPLATE, DEFAULT_PROGRAM_ITEM_TEMPLATE} from './lib/topics.js';
 
 export const OPTIONS = {
@@ -9,6 +10,7 @@ export const OPTIONS = {
         type: 'string',
         describe: 'hostname or ip of the CCU, or "auto" to find it on the network (see --discover)',
         demandOption: true,
+        discover: true,
     },
     'ccu-tls': {type: 'boolean', describe: 'use the TLS ports (4xxxx) and https for ReGa', default: false},
     'ccu-insecure': {type: 'boolean', describe: "accept the CCU's self-signed certificate", default: false},
@@ -127,7 +129,7 @@ export default parseConfig({
     pkg,
     options: OPTIONS,
     defaults: {name: 'hm'},
-    discovery: true,
+    discovery: discoveryHint(),
     examples: [
         ['$0 --discover', 'find CCUs on the network and exit'],
         ['$0 -a homematic-ccu3 -u mqtt://broker', 'run in the foreground'],

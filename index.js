@@ -26,12 +26,13 @@ import {compileIgnore} from './lib/roles.js';
 import {discoveryModel} from './lib/hadiscovery.js';
 import {discoveryHint} from './lib/discovery.js';
 
-handleInstall(config);
-
 /*
  * finding the CCU (core B-2): --discover prints what answers the eQ-3 broadcast probe,
- * --ccu-address auto uses it when exactly one CCU answers. Both run before anything else is
- * set up — the adapter's logger does not exist yet, so discovery gets its own.
+ * --ccu-address auto uses it when exactly one CCU answers — its dns name if it has one, so a
+ * new dhcp lease does not break the config. This runs before the installer on purpose:
+ * `--install -a auto` then writes what was found, instead of leaving every service start to
+ * scan the network and fail when the CCU is briefly away. The adapter's logger does not exist
+ * yet, so discovery gets its own.
  */
 if (config.discover || config.ccuAddress === 'auto') {
     const discoveryLog = createLogger({envPrefix: config.$envPrefix || 'HM2MQTT', level: config.verbosity});
@@ -47,6 +48,8 @@ if (config.discover || config.ccuAddress === 'auto') {
         process.exit(1);
     }
 }
+
+handleInstall(config);
 
 const COUNTER_INTERVAL_MS = 30000;
 const VALUES_SAVE_MS = 300000;

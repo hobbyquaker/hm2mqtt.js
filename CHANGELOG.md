@@ -8,8 +8,13 @@
   whose ports are open — `--discover-json` for JSON, `--discover-timeout` for how long it
   listens. `-a auto` runs the same scan at start and uses the CCU it found; it refuses to start
   when none or several answer instead of bridging the wrong house.
-- `--discover-address` for a CCU a router away (its own VLAN): names the CCU or another subnet's
-  broadcast address, which a broadcast never reaches.
+- `--discover-address` for a CCU a router away (its own VLAN): names the CCU, another subnet's
+  broadcast address, or a range to sweep (`172.16.24.0/24`).
+- `-a auto` takes the CCU's dns name when it has one that round-trips, so a new dhcp lease does
+  not break the instance; `--discover-ip` pins the address instead. `--install -a auto` persists
+  what was found rather than leaving every service start to scan the network.
+- `--config-schema` marks `ccu-address` with `x-discover: "network"`, so a management UI (she)
+  can offer the scan when adding an instance.
 - The probe and the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-discover),
   now expressed as a discovery hint for mqtt-interfaces-core 0.9 ([lib/discovery.js](lib/discovery.js));
   the interface ports it probes are the table `--interfaces auto` already used. Verified against a
