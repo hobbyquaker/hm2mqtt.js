@@ -4,7 +4,12 @@ import {DEFAULT_INTERFACES, INTERFACE_NAMES} from './lib/interfaces.js';
 import {DEFAULT_ITEM_TEMPLATE, DEFAULT_SYSVAR_ITEM_TEMPLATE, DEFAULT_PROGRAM_ITEM_TEMPLATE} from './lib/topics.js';
 
 export const OPTIONS = {
-    'ccu-address': {alias: 'a', type: 'string', describe: 'hostname or ip of the CCU', demandOption: true},
+    'ccu-address': {
+        alias: 'a',
+        type: 'string',
+        describe: 'hostname or ip of the CCU, or "auto" to find it on the network (see --discover)',
+        demandOption: true,
+    },
     'ccu-tls': {type: 'boolean', describe: 'use the TLS ports (4xxxx) and https for ReGa', default: false},
     'ccu-insecure': {type: 'boolean', describe: "accept the CCU's self-signed certificate", default: false},
     'ccu-username': {type: 'string', describe: 'CCU user (authentication enabled on the CCU)'},
@@ -122,7 +127,9 @@ export default parseConfig({
     pkg,
     options: OPTIONS,
     defaults: {name: 'hm'},
+    discovery: true,
     examples: [
+        ['$0 --discover', 'find CCUs on the network and exit'],
         ['$0 -a homematic-ccu3 -u mqtt://broker', 'run in the foreground'],
         ['$0 -a 192.168.1.50 -i BidCos-RF,HmIP-RF --plain-tree state', 'two interfaces plus the plain mirror tree'],
         ['sudo $0 --install -n hm -a homematic-ccu3 -u mqtt://broker', 'install as service hm2mqtt@hm'],

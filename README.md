@@ -46,6 +46,40 @@ docker run -d --name hm2mqtt --restart unless-stopped --network host -v hm2mqtt:
 Host networking, or publish 2126/2127 and set `HM2MQTT_INIT_ADDRESS` to the docker host's address
 so the CCU can call back. `--restart unless-stopped` brings it back after `maintenance/set/restart`.
 
+## Finding the CCU
+
+```
+hm2mqtt --discover
+```
+
+broadcasts the eQ-3 discovery datagram (UDP 43439) and prints every CCU that answers, with its
+firmware version and the interfaces whose ports are open:
+
+```
+172.16.24.145  eQ3-HmIP-CCU3-App  serial 3014F711A0001F58A992F585  [ReGa BidCos-RF BidCos-Wired HmIP-RF VirtualDevices]  (udp)
+```
+
+`--discover-json` prints the same as JSON. `-a auto` runs the scan at start and uses the CCU it
+found — it refuses to start when none or more than one answers, rather than bridging the wrong
+house:
+
+```
+hm2mqtt -a auto -u mqtt://broker
+```
+
+A broadcast does not cross a router. If the CCU is on another subnet — a separate VLAN for the
+house automation is a common setup — name it (or its subnet's broadcast address):
+
+```
+hm2mqtt --discover --discover-address 172.16.24.145
+hm2mqtt -a auto --discover-address 172.16.24.255 -u mqtt://broker
+```
+
+`--discover-timeout` (default 5 s) is how long the scan listens. The scanning itself lives in
+[mqtt-interfaces-core](https://github.com/hobbyquaker/mqtt-interfaces-core); this adapter only
+declares the probe and the interface ports ([lib/discovery.js](lib/discovery.js)). The probe and
+the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-discover).
+
 ## Options
 
 `hm2mqtt --help` lists everything; every option is also an environment variable

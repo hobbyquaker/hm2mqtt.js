@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.3.0
+
+### Added
+
+- **Finding the CCU on the network**: `--discover` broadcasts the eQ-3 discovery datagram (UDP 43439) and prints every CCU that answers — type, serial, firmware version and the interfaces
+  whose ports are open — `--discover-json` for JSON, `--discover-timeout` for how long it
+  listens. `-a auto` runs the same scan at start and uses the CCU it found; it refuses to start
+  when none or several answer instead of bridging the wrong house.
+- `--discover-address` for a CCU a router away (its own VLAN): names the CCU or another subnet's
+  broadcast address, which a broadcast never reaches.
+- The probe and the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-discover),
+  now expressed as a discovery hint for mqtt-interfaces-core 0.9 ([lib/discovery.js](lib/discovery.js));
+  the interface ports it probes are the table `--interfaces auto` already used. Verified against a
+  CCU3 (`eQ3-HmIP-CCU3-App`, firmware 3.87.6).
+
+### Changed
+
+- Requires mqtt-interfaces-core ^0.9.0.
+
 ## 3.2.1
 
 ### Added

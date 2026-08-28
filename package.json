@@ -1,6 +1,6 @@
 {
   "name": "hm2mqtt",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "Interface between Homematic CCU and MQTT",
   "type": "module",
   "main": "index.js",
@@ -69,7 +69,7 @@
     "binrpc": "^3.3.1",
     "homematic-rega": "^2.0.0",
     "homematic-xmlrpc": "^2.0.0",
-    "mqtt-interfaces-core": "^0.7.0"
+    "mqtt-interfaces-core": "^0.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

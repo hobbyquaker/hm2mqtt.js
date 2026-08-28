@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createAdapter} from 'mqtt-interfaces-core';
+import {createAdapter, createLogger, runDiscovery, autoAddress} from 'mqtt-interfaces-core';
 import {Rega} from 'homematic-rega';
 import config from './config.js';
 import pkg from './package.json' with {type: 'json'};
@@ -24,8 +24,29 @@ import {castValue, isWriteable} from './lib/cast.js';
 import {sanitizeName, resolveSet, resolveParamset, plainValue, compileTemplate, ItemIndex} from './lib/topics.js';
 import {compileIgnore} from './lib/roles.js';
 import {discoveryModel} from './lib/hadiscovery.js';
+import {discoveryHint} from './lib/discovery.js';
 
 handleInstall(config);
+
+/*
+ * finding the CCU (core B-2): --discover prints what answers the eQ-3 broadcast probe,
+ * --ccu-address auto uses it when exactly one CCU answers. Both run before anything else is
+ * set up — the adapter's logger does not exist yet, so discovery gets its own.
+ */
+if (config.discover || config.ccuAddress === 'auto') {
+    const discoveryLog = createLogger({envPrefix: config.$envPrefix || 'HM2MQTT', level: config.verbosity});
+    const hint = discoveryHint({tls: config.ccuTls});
+    if (config.discover) {
+        await runDiscovery({hint, config, log: discoveryLog}); // prints and exits
+    }
+    try {
+        config.ccuAddress = await autoAddress(hint, {config, log: discoveryLog});
+    } catch (err) {
+        // no CCU or several: a wrong guess would bridge the wrong house
+        discoveryLog.error('--ccu-address auto:', err.message);
+        process.exit(1);
+    }
+}
 
 const COUNTER_INTERVAL_MS = 30000;
 const VALUES_SAVE_MS = 300000;
