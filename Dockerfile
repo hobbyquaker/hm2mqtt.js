@@ -15,6 +15,7 @@ ENV NODE_ENV=production \
     HM2MQTT_STATE_DIR=/data \
     HM2MQTT_VERBOSITY=info
 
+RUN mkdir /data && chown node:node /data
 VOLUME /data
 # the CCU calls back on 2126 (xmlrpc) / 2127 (binrpc): use --network host, or publish the ports
 # and set HM2MQTT_INIT_ADDRESS to the docker host's address

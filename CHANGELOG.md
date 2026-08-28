@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.2.1
+
+### Added
+
+- Docker images on `ghcr.io/hobbyquaker/hm2mqtt.js`, built for amd64, arm64 and armv7 by the
+  release workflow on every tag (`x.y.z`, `x.y`, `latest`) — no `docker build` needed any more;
+  `.dockerignore` added.
+
+### Fixed
+
+- The image creates `/data` owned by `node`: on a fresh volume docker created the mount point
+  root-owned, so the state directory could not be written.
+
 ## 3.2.0
 
 ### Added
