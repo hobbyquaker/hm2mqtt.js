@@ -465,6 +465,15 @@ What was built, in order, and what the live runs taught:
   good, no trimming in 4.0**; OQ-49 non-`PRESS_` ACTION datapoints unretained is fine (H-9
   stands); OQ-50 no broker ACL on the client id (core scheme `hm_<random>`); OQ-47 Home
   Assistant is not a priority (3.1 stays on the list). Still open: OQ-48 (spec note), OQ-52.
+- **Overnight compare 2026-08-28 08:20 (hm3 up 14 h, 0 restarts, 100 MB RSS, no warnings but the
+  duplicate-names notice)**: 1486 items on both trees; every difference in `val` or `hm.*` is
+  explained: 1479 × `hm.ccu` (`localhost` vs `homematic-ccu3`), 7 × counters (count since each
+  process started — the flow's since its last restart), 2 × `hm.working`/`hm.direction` on the
+  `WORKING`/`DIRECTION` datapoints of one dimmer (node-red saw both in one multicall and
+  cross-filled the hints, we received them in separate calls; the `LEVEL` payload itself matched).
+  376 fields exist only on hm3 (`datapointType/Min/Max/Default/Control` for 78 channels whose
+  descriptions node-red never had). 992 items only in `hm` are stale retained topics of the flow.
+  **The drop-in claim holds; the cutover (§9) can happen any time.**
 - The parallel run and cutover (§9) are done by the user on the home server.
 - **Live on the home server (mqtt-ifaces, 2026-08-27 17:30, after the CCU firewall was opened):**
   all four interfaces subscribed, 270/104/457/52 devices announced, 537 missing HmIP descriptions
