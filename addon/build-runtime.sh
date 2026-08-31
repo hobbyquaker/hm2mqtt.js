@@ -20,6 +20,11 @@
 #   aarch64  OpenCCU only, glibc is current -> stock nodejs.org tarball.
 #   x86_64   OpenCCU only, glibc is current -> stock nodejs.org tarball.
 #
+# Verified on real hardware 2026-08-31 (CCU3, firmware 3.87.6, kernel 4.14.34, armv7l): the Alpine
+# musl build of Node 24.18.1 starts, OpenSSL 3.5.8 and TLS work, Intl/ICU works, and hm2mqtt's full
+# test suite passes there - 69 tests in 11 s. Note that child processes only work once the ELF
+# interpreter has been patched, since node re-executes itself through process.execPath.
+#
 # Requires: curl, tar, and for armv7l docker (to let apk resolve the foreign-arch packages) and
 # patchelf. Runs on Linux; on macOS use the workflow.
 
@@ -54,7 +59,9 @@ require() {
 }
 
 rm -rf "$OUT"
-mkdir -p "$OUT/bin" "$OUT/lib"
+mkdir -p "$OUT/bin"
+# only the musl runtime carries its own shared libraries
+[ "$ARCH" = armv7l ] && mkdir -p "$OUT/lib"
 
 if [ "$ARCH" = armv7l ]; then
     require curl tar docker patchelf
@@ -127,6 +134,16 @@ if [ "$ARCH" = armv7l ]; then
         done
     done
 
+    # ICU data. Alpine builds node against the system ICU, whose libicudata.so is a stub - the real
+    # data is a .dat file that ICU looks for under a path compiled into the library
+    # (/usr/share/icu/<ver>). That path does not exist on a CCU, so the data ships inside the addon
+    # and the rc.d script exports ICU_DATA; without it node does not start.
+    if [ -d "$ROOT/usr/share/icu" ]; then
+        mkdir -p "$OUT/share"
+        cp -a "$ROOT/usr/share/icu" "$OUT/share/"
+        ICU_VERSION="$(ls "$OUT/share/icu" | head -1)"
+    fi
+
     # the ELF interpreter itself (musl's loader), which is not a DT_NEEDED entry
     LOADER="$(patchelf --print-interpreter "$OUT/bin/node")"
     cp -a "$ROOT$LOADER" "$OUT/lib/$(basename "$LOADER")"
@@ -177,13 +194,14 @@ fi
 # npm is deliberately absent: the addon ships its dependencies pre-installed (there are no build
 # tools on a CCU anyway), so the runtime is the node binary and nothing else.
 
-cat > "$OUT/versions" <<VERSIONS
-NODE_VERSION=$NODE_VERSION
-NODE_ARCH=$ARCH
-NODE_SOURCE=$RUNTIME_SOURCE
-NODE_PREFIX=$PREFIX
-BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-VERSIONS
+{
+    echo "NODE_VERSION=$NODE_VERSION"
+    echo "NODE_ARCH=$ARCH"
+    echo "NODE_SOURCE=$RUNTIME_SOURCE"
+    echo "NODE_PREFIX=$PREFIX"
+    [ -n "${ICU_VERSION:-}" ] && echo "NODE_ICU_DATA=$PREFIX/share/icu/$ICU_VERSION"
+    echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/versions"
 
 # Self-check: every library the binary asks for must be part of the tree, and nothing may point
 # outside the prefix.
@@ -206,6 +224,11 @@ if [ "$ARCH" = armv7l ]; then
             exit 1
             ;;
     esac
+    [ -n "${ICU_VERSION:-}" ] || {
+        echo "error: no ICU data in the staging root - node would not start" >&2
+        exit 1
+    }
+    echo "icu data:    $PREFIX/share/icu/$ICU_VERSION (export ICU_DATA)"
     echo "libraries:   $(find "$OUT/lib" -maxdepth 1 -type f | wc -l | tr -d ' ') files, all inside $PREFIX/lib"
 fi
 

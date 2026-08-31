@@ -1,0 +1,135 @@
+#!/bin/sh
+#
+# Service script for the hm2mqtt CCU addon. Called by run-parts at boot ("init" from
+# S55InitAddons, "start" from S98StartAddons), at shutdown ("stop"), and by the WebUI
+# ("info", "restart", "uninstall").
+
+ADDON=hm2mqtt
+ADDON_DIR=/usr/local/addons/hm2mqtt
+CONF_DIR=/usr/local/etc/config
+WWW_DIR=$CONF_DIR/addons/www/$ADDON
+
+NODE=$ADDON_DIR/bin/node
+APP=$ADDON_DIR/app/index.js
+ENV_FILE=$ADDON_DIR/etc/hm2mqtt.env
+PIDFILE=/var/run/$ADDON.pid
+LOG=$ADDON_DIR/var/hm2mqtt.log
+LOG_MAX=1048576
+
+[ -f $ADDON_DIR/versions ] && . $ADDON_DIR/versions
+
+# ICU keeps its data outside the libraries; without this node does not start (musl build)
+[ -n "$NODE_ICU_DATA" ] && export ICU_DATA="$NODE_ICU_DATA"
+
+Running() {
+    [ -f $PIDFILE ] || return 1
+    kill -0 "$(cat $PIDFILE)" 2>/dev/null
+}
+
+Start() {
+    if Running; then
+        echo "$ADDON already running"
+        return 0
+    fi
+
+    if [ ! -f $ENV_FILE ]; then
+        logger -t $ADDON -p daemon.err "not configured - open Systemsteuerung -> hm2mqtt"
+        echo "$ADDON is not configured yet"
+        return 1
+    fi
+
+    # the config is a plain env file; the same HM2MQTT_* variables the systemd unit and the
+    # docker image use
+    set -a
+    . $ENV_FILE
+    set +a
+
+    if [ -z "$HM2MQTT_MQTT_URL" ]; then
+        logger -t $ADDON -p daemon.err "no MQTT broker configured - open Systemsteuerung -> hm2mqtt"
+        echo "$ADDON has no broker configured"
+        return 1
+    fi
+
+    mkdir -p $ADDON_DIR/var
+    if [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt $LOG_MAX ]; then
+        mv $LOG $LOG.1
+    fi
+
+    echo -n "Starting $ADDON: "
+    logger -t $ADDON -p daemon.info "starting hm2mqtt $VERSION_ADDON (node $NODE_VERSION)"
+    # sh -c "exec ..." so the recorded pid is node's own, not a wrapper's
+    start-stop-daemon -S -b -m -p $PIDFILE -x /bin/sh -- -c "exec $NODE $APP >>$LOG 2>&1"
+    echo "OK"
+}
+
+Stop() {
+    if ! Running; then
+        rm -f $PIDFILE
+        echo "$ADDON not running"
+        return 1
+    fi
+    echo -n "Stopping $ADDON: "
+    logger -t $ADDON -p daemon.info "stopping hm2mqtt"
+    start-stop-daemon -K -q -p $PIDFILE
+    i=0
+    while Running && [ $i -lt 10 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    if Running; then
+        logger -t $ADDON -p daemon.warn "killing hm2mqtt"
+        kill -9 "$(cat $PIDFILE)" 2>/dev/null
+    fi
+    rm -f $PIDFILE
+    echo "OK"
+}
+
+case "$1" in
+    init)
+        # called before the CCU interfaces are up - nothing to prepare, start happens later
+        exit 0
+        ;;
+
+    start)
+        Start
+        ;;
+
+    stop)
+        Stop
+        ;;
+
+    restart)
+        Stop
+        sleep 2
+        Start
+        ;;
+
+    info)
+        echo "Info: <div>Homematic to MQTT bridge - <a target=\"_blank\" href=\"https://github.com/hobbyquaker/hm2mqtt.js\">github.com/hobbyquaker/hm2mqtt.js</a></div>"
+        echo "Name: hm2mqtt"
+        echo "Version: $VERSION_ADDON"
+        echo "Update: /addons/hm2mqtt/update_check.cgi"
+        echo "Config-Url: /addons/hm2mqtt/settings.cgi"
+        echo "Operations: restart uninstall"
+        ;;
+
+    uninstall)
+        Stop
+        $ADDON_DIR/bin/update_addon $ADDON
+        if [ -f /usr/local/etc/monit-hm2mqtt.cfg ]; then
+            rm -f /usr/local/etc/monit-hm2mqtt.cfg
+            [ -x /usr/bin/monit ] && /usr/bin/monit reload >/dev/null 2>&1
+        fi
+        rm -f $CONF_DIR/rc.d/$ADDON
+        rm -rf $WWW_DIR
+        rm -rf $ADDON_DIR
+        logger -t $ADDON -p daemon.info "uninstalled hm2mqtt"
+        ;;
+
+    *)
+        echo "Usage: $ADDON {init|start|stop|restart|info|uninstall}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,53 @@
+#!/bin/tclsh
+#
+# Adds or removes this addon's entry in /usr/local/etc/config/hm_addons.cfg, which is what puts
+# the configuration button into Systemsteuerung.
+#
+#   update_addon <id> <cfgfile>   add or replace the entry
+#   update_addon <id>             remove it
+#
+# The CCU3 firmware ships no update_addon of its own (only RedMatic bundles a compiled one), so
+# here it is as a tcl script: hm_addons.cfg is a Tcl dictionary, which tclsh - present on every
+# CCU - can edit without any binary.
+
+# HM_ADDONS_CFG lets the build test this without a CCU
+set file /usr/local/etc/config/hm_addons.cfg
+if {[info exists env(HM_ADDONS_CFG)]} {
+    set file $env(HM_ADDONS_CFG)
+}
+set id [lindex $argv 0]
+set cfgfile [lindex $argv 1]
+
+if {$id eq ""} {
+    puts stderr "usage: update_addon <id> \[<cfgfile>\]"
+    exit 1
+}
+
+set data ""
+if {[file exists $file]} {
+    set fd [open $file r]
+    set data [string trim [read $fd]]
+    close $fd
+}
+
+# a malformed file would take the whole WebUI page with it - start over instead
+if {[catch {dict size $data}]} {
+    set data ""
+}
+
+if {$cfgfile ne ""} {
+    set fd [open $cfgfile r]
+    set entry [string trim [read $fd]]
+    close $fd
+    # the .cfg holds the braced value; dict set adds the braces itself
+    if {[string index $entry 0] eq "\{" && [string index $entry end] eq "\}"} {
+        set entry [string range $entry 1 end-1]
+    }
+    dict set data $id $entry
+} elseif {[dict exists $data $id]} {
+    dict unset data $id
+}
+
+set fd [open $file w]
+puts -nonewline $fd $data
+close $fd

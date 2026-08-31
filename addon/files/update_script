@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# Runs on the CCU when the package is installed or updated through
+# Systemsteuerung -> Zusatzsoftware, with the extracted package as working directory.
+#
+# Everything happens inside /usr/local/addons/hm2mqtt plus three links the platform requires
+# (rc.d, addons/www, hm_addons.cfg). No system file is patched, no binary is placed in
+# /usr/local/bin, no profile or PATH is touched - another addon's Node.js stays untouched and
+# hm2mqtt's own runtime is invisible to it.
+
+ADDON=hm2mqtt
+ADDONS_DIR=/usr/local/addons
+CONF_DIR=/usr/local/etc/config
+ADDON_DIR=$ADDONS_DIR/$ADDON
+WWW_DIR=$CONF_DIR/addons/www/$ADDON
+
+# 10 tells the WebUI this was a fresh install (it then offers a reboot), 0 an update
+EXITCODE=10
+
+mount | grep -q ' /usr/local ' || mount /usr/local
+
+mkdir -p $ADDONS_DIR $CONF_DIR/rc.d $CONF_DIR/addons/www
+chmod 755 $ADDONS_DIR
+
+if [ -x $CONF_DIR/rc.d/$ADDON ]; then
+    EXITCODE=0
+    $CONF_DIR/rc.d/$ADDON stop >/dev/null 2>&1
+fi
+
+# the configuration survives updates; everything else is replaced wholesale
+if [ -f $ADDON_DIR/etc/hm2mqtt.env ]; then
+    cp $ADDON_DIR/etc/hm2mqtt.env /tmp/hm2mqtt.env.keep
+fi
+
+rm -rf $ADDON_DIR
+cp -af $ADDON $ADDONS_DIR/
+
+if [ -f /tmp/hm2mqtt.env.keep ]; then
+    mv /tmp/hm2mqtt.env.keep $ADDON_DIR/etc/hm2mqtt.env
+else
+    cp $ADDON_DIR/etc/default.env $ADDON_DIR/etc/hm2mqtt.env
+fi
+
+ln -sfn $ADDON_DIR/rc.d/$ADDON $CONF_DIR/rc.d/$ADDON
+rm -rf $WWW_DIR
+ln -sfn $ADDON_DIR/www $WWW_DIR
+
+# entry in Systemsteuerung
+touch $CONF_DIR/hm_addons.cfg
+$ADDON_DIR/bin/update_addon $ADDON $ADDON.cfg
+
+# monit exists on OpenCCU, not on the CCU3 firmware
+if [ -x /usr/bin/monit ]; then
+    ln -sf $ADDON_DIR/etc/monit.cfg /usr/local/etc/monit-hm2mqtt.cfg
+    /usr/bin/monit reload >/dev/null 2>&1
+fi
+
+sync
+exit $EXITCODE

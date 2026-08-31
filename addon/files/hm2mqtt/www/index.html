@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>hm2mqtt</title>
+<style>
+    body {
+        font-family:
+            system-ui,
+            -apple-system,
+            sans-serif;
+        margin: 2rem;
+        max-width: 46rem;
+        color: #222;
+    }
+    code,
+    pre {
+        background: #f4f4f4;
+        padding: 0.15rem 0.35rem;
+        border-radius: 3px;
+    }
+    pre {
+        padding: 0.75rem;
+        overflow-x: auto;
+    }
+</style>
+
+<h1>hm2mqtt</h1>
+
+<p>
+    Die Konfigurationsoberfläche folgt in einer der nächsten Versionen. Bis dahin wird hm2mqtt über seine
+    Konfigurationsdatei eingerichtet:
+</p>
+
+<pre>/usr/local/addons/hm2mqtt/etc/hm2mqtt.env</pre>
+
+<p>
+    Mindestens <code>HM2MQTT_MQTT_URL</code> muss gesetzt sein, sonst startet der Dienst nicht. Danach in der
+    Systemsteuerung <em>Neu starten</em> wählen. Alle Optionen:
+</p>
+
+<pre>/usr/local/addons/hm2mqtt/bin/node /usr/local/addons/hm2mqtt/app/index.js --help</pre>
+
+<p>
+    Das Log steht in <code>/usr/local/addons/hm2mqtt/var/hm2mqtt.log</code>, Start und Stopp meldet der Dienst
+    zusätzlich ins Systemlog.
+</p>
+
+<p>
+    <a href="https://github.com/hobbyquaker/hm2mqtt.js" target="_blank" rel="noreferrer"
+        >github.com/hobbyquaker/hm2mqtt.js</a
+    >
+</p>

@@ -1,41 +1,48 @@
-name: Addon runtime
+name: Addon package
 
-# Builds the Node.js runtime that the CCU addon package bundles (addon/build-runtime.sh).
-# Manual for all architectures, automatic on changes to the script itself.
+# Builds the installable CCU addon package (addon/build.sh), which includes assembling the
+# bundled Node.js runtime (addon/build-runtime.sh). Manual for all architectures, automatic on
+# changes to the addon itself - none of this can be built on macOS, so CI is the only way to
+# exercise it.
 
 on:
   workflow_dispatch:
     inputs:
       node-major:
-        description: 'Node major version to package (default 24)'
+        description: 'Node major version to bundle (default 24)'
         required: false
         default: '24'
   pull_request:
     paths: ['addon/**', '.github/workflows/addon-runtime.yml']
 
 jobs:
-  runtime:
+  package:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # armv7l is the interesting one (musl repackage); the others are stock tarballs and only
-        # built on demand
+        # armv7l is the interesting one (Alpine musl repackage + patchelf); the others are stock
+        # tarballs and only built on demand
         arch: ${{ github.event_name == 'pull_request' && fromJSON('["armv7l"]') || fromJSON('["armv7l", "aarch64", "x86_64"]') }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y patchelf
-      - name: Build runtime
-        run: addon/build-runtime.sh ${{ matrix.arch }}
+      - name: Build addon package
+        run: addon/build.sh ${{ matrix.arch }} --beta
         env:
           NODE_MAJOR: ${{ inputs.node-major || '24' }}
-      - name: Show what was produced
+      - name: Inspect the result
         run: |
-          cat addon/work/${{ matrix.arch }}/runtime/versions
-          file addon/work/${{ matrix.arch }}/runtime/bin/node
-          du -sh addon/work/${{ matrix.arch }}/runtime
+          cat addon/work/${{ matrix.arch }}/pkg/hm2mqtt/versions
+          file addon/work/${{ matrix.arch }}/pkg/hm2mqtt/bin/node
+          tar tzf dist/*.tar.gz | head -30
       - uses: actions/upload-artifact@v4
         with:
-          name: node-runtime-${{ matrix.arch }}
-          path: addon/work/${{ matrix.arch }}/runtime
-          retention-days: 7
+          name: hm2mqtt-addon-${{ matrix.arch }}
+          path: dist/
+          retention-days: 14
