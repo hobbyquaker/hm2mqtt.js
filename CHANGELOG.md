@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Addon UI: three tabs** — Konfiguration, Namen, Log — instead of panels toggled from the header.
+  Service control, state and the language switch stay in the header above them.
+- `--json-payloads` and `--hm-payload` are no longer offered in the addon UI: both are implied by
+  the payload format, and three overlapping switches only invite combinations nobody wants. The CLI
+  keeps them.
+
 ## 3.4.7
 
 ### Fixed

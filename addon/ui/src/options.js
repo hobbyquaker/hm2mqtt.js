@@ -32,6 +32,10 @@ export const NOT_APPLICABLE = {
     'init-address': 'always loopback on the CCU',
     // the file lives in the addon and is edited under "Namen", so the path is not a user's business
     'name-file': 'fixed path inside the addon; edited in the Namen tab',
+    // both are implied by the payload format, and offering three overlapping switches invites
+    // combinations nobody wants
+    'json-payloads': 'covered by the payload format',
+    'hm-payload': 'covered by the payload format',
     // On the CCU the connection is not a decision: the address is loopback, the interface processes
     // are talked to directly (binrpc for rfd and hs485d), and those ports carry neither TLS nor
     // authentication. Only *which* interfaces to use is left, and that is the one field kept.
@@ -54,8 +58,6 @@ export const OPTIONS = {
     'mqtt-password': {group: 'mqtt', de: 'Passwort', en: 'Password'},
     name: {group: 'mqtt', de: 'Instanzname (erste Topic-Ebene)', en: 'Instance name (first topic level)'},
     payload: {group: 'mqtt', de: 'Payload-Format', en: 'Payload format'},
-    'json-payloads': {group: 'mqtt', de: 'JSON-Payloads', en: 'JSON payloads'},
-    'hm-payload': {group: 'mqtt', de: 'hm-Block im Payload', en: 'hm block in the payload'},
     'plain-tree': {group: 'mqtt', de: 'Zusätzlicher einfacher Themenbaum', en: 'Additional plain topic tree'},
     'mqtt-client-id-prefix': {group: 'mqtt', de: 'Client-ID-Präfix', en: 'Client id prefix'},
     'mqtt-tls-ca': {group: 'mqtt', de: 'CA-Zertifikat (Datei)', en: 'CA certificate (file)'},

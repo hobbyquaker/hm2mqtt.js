@@ -17,8 +17,8 @@
     let saved = $state({});
     let status = $state({});
     let logText = $state('');
-    let showLog = $state(false);
-    let showNames = $state(false);
+    /** which of the three pages is showing: config | names | logs */
+    let tab = $state('config');
     let namesText = $state('');
     let namesStatus = $state(null);
     let error = $state('');
@@ -188,25 +188,27 @@
     <button onclick={() => control(status.running ? 'stop' : 'start')} disabled={busy !== ''}>
         {status.running ? t('Stoppen', 'Stop') : t('Starten', 'Start')}
     </button>
-    <button
-        onclick={() => {
-            showLog = !showLog;
-            if (showLog) loadLog();
-        }}>{t('Log', 'Log')}</button
-    >
-    <button
-        onclick={() => {
-            showNames = !showNames;
-            if (showNames) loadNames();
-        }}>{t('Namen', 'Names')}</button
-    >
     <button onclick={switchLang} title="Sprache / language">{lang === 'de' ? 'EN' : 'DE'}</button>
 </header>
+
+<nav>
+    {#each [['config', t('Konfiguration', 'Configuration')], ['names', t('Namen', 'Names')], ['logs', t('Log', 'Logs')]] as [id, label]}
+        <button
+            class="tab"
+            class:active={tab === id}
+            onclick={() => {
+                tab = id;
+                if (id === 'names') loadNames();
+                if (id === 'logs') loadLog();
+            }}>{label}</button
+        >
+    {/each}
+</nav>
 
 {#if error}<div class="banner bad">{error}</div>{/if}
 {#if notice}<div class="banner good">{notice}</div>{/if}
 
-{#if showLog}
+{#if tab === 'logs'}
     <section class="log">
         <div class="logbar">
             <strong>{t('Protokoll', 'Log')}</strong>
@@ -216,7 +218,7 @@
     </section>
 {/if}
 
-{#if showNames}
+{#if tab === 'names'}
     <section class="names">
         <div class="logbar">
             <strong>{t('Namen', 'Names')}</strong>
@@ -244,10 +246,11 @@
     </section>
 {/if}
 
-{#if !schema}
-    <p class="loading">{t('lädt …', 'loading …')}</p>
-{:else}
-    <main>
+{#if tab === 'config'}
+    {#if !schema}
+        <p class="loading">{t('lädt …', 'loading …')}</p>
+    {:else}
+        <main>
         {#each GROUPS as group}
             {@const fields = fieldsOf(group.id)}
             {#if fields.length}
@@ -275,15 +278,16 @@
                 </section>
             {/if}
         {/each}
-    </main>
+        </main>
 
-    <footer>
+        <footer>
         <button class="primary" onclick={() => save({restart: true})} disabled={busy !== ''}>
             {busy === 'save-restart' ? t('speichere …', 'saving …') : t('Speichern & Neustart', 'Save & restart')}
         </button>
         <button onclick={() => save()} disabled={busy !== ''}>{t('Nur speichern', 'Save only')}</button>
-        {#if dirty}<span class="muted">{t('ungespeicherte Änderungen', 'unsaved changes')}</span>{/if}
-    </footer>
+            {#if dirty}<span class="muted">{t('ungespeicherte Änderungen', 'unsaved changes')}</span>{/if}
+        </footer>
+    {/if}
 {/if}
 
 <style>
@@ -358,6 +362,31 @@
     .banner.good {
         background: #eef6ee;
         border-left: 3px solid #4a8;
+    }
+    nav {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0 1rem;
+        background: #fff;
+        border-bottom: 1px solid #ddd;
+        position: sticky;
+        top: 3.1rem;
+        z-index: 1;
+    }
+    .tab {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        background: none;
+        padding: 0.55rem 0.9rem;
+        font: inherit;
+        color: #555;
+        cursor: pointer;
+    }
+    .tab.active {
+        border-bottom-color: #2d6cb5;
+        color: #111;
+        font-weight: 600;
     }
     .group {
         margin: 1rem 0;
