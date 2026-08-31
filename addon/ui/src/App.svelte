@@ -18,6 +18,9 @@
     let status = $state({});
     let logText = $state('');
     let showLog = $state(false);
+    let showNames = $state(false);
+    let namesText = $state('');
+    let namesStatus = $state(null);
     let error = $state('');
     let notice = $state('');
     let busy = $state('');
@@ -102,6 +105,37 @@
         }
     }
 
+    async function loadNames() {
+        namesStatus = null;
+        try {
+            namesText = (await api.getNames()).trim() || '{}';
+        } catch (err) {
+            namesStatus = {ok: false, text: err.message};
+        }
+    }
+
+    /**
+     * Saves the name file. Parsed here first so a typo is reported without a round trip; the addon
+     * validates again before it replaces the file.
+     */
+    async function saveNames() {
+        try {
+            JSON.parse(namesText);
+        } catch (err) {
+            namesStatus = {ok: false, text: t('Kein gültiges JSON: ', 'Not valid JSON: ') + err.message};
+            return;
+        }
+        busy = 'names';
+        try {
+            const {names} = await api.setNames(namesText);
+            namesStatus = {ok: true, text: t(`${names} Namen gespeichert`, `${names} names saved`)};
+        } catch (err) {
+            namesStatus = {ok: false, text: err.message};
+        } finally {
+            busy = '';
+        }
+    }
+
     async function loadLog() {
         try {
             logText = await api.getLog(300);
@@ -160,6 +194,12 @@
             if (showLog) loadLog();
         }}>{t('Log', 'Log')}</button
     >
+    <button
+        onclick={() => {
+            showNames = !showNames;
+            if (showNames) loadNames();
+        }}>{t('Namen', 'Names')}</button
+    >
     <button onclick={switchLang} title="Sprache / language">{lang === 'de' ? 'EN' : 'DE'}</button>
 </header>
 
@@ -173,6 +213,34 @@
             <button onclick={loadLog}>{t('Aktualisieren', 'Refresh')}</button>
         </div>
         <pre>{logText}</pre>
+    </section>
+{/if}
+
+{#if showNames}
+    <section class="names">
+        <div class="logbar">
+            <strong>{t('Namen', 'Names')}</strong>
+            <span class="muted">
+                {t(
+                    'Eigene Namen für Kanäle, die die CCU nicht benennt - JSON, Adresse zu Name.',
+                    'Your own names for channels the CCU does not name - JSON, address to name.',
+                )}
+            </span>
+        </div>
+        <textarea bind:value={namesText} spellcheck="false" rows="12"></textarea>
+        <div class="logbar">
+            <button onclick={saveNames} disabled={busy !== ''}>
+                {busy === 'names' ? t('speichere …', 'saving …') : t('Namen speichern', 'Save names')}
+            </button>
+            <button onclick={loadNames} disabled={busy !== ''}>{t('Verwerfen', 'Discard')}</button>
+            {#if namesStatus}
+                <span class:bad={!namesStatus.ok}>{namesStatus.text}</span>
+            {/if}
+        </div>
+        <p class="muted">
+            {t('Nach dem Speichern den Dienst neu starten.', 'Restart the service after saving.')}
+            <code>{'{"ABC1234567:1": "Wohnzimmer Licht"}'}</code>
+        </p>
     </section>
 {/if}
 
@@ -353,6 +421,19 @@
         align-items: center;
         gap: 0.6rem;
         margin-top: 1rem;
+    }
+    .names textarea {
+        width: 100%;
+        box-sizing: border-box;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.82rem;
+        padding: 0.6rem;
+        border: 1px solid #e2e2e2;
+        border-radius: 3px;
+        background: #fff;
+    }
+    .bad {
+        color: #c55;
     }
     .loading {
         color: #666;

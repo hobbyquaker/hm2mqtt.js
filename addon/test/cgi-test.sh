@@ -31,6 +31,10 @@ NODE_VERSION=v24.18.1
 VERSIONS
 printf 'line one\nline two\n' > "$TREE/var/hm2mqtt.log"
 
+mkdir -p "$TREE/bin"
+ln -sf "$(command -v node)" "$TREE/bin/node"
+printf '{"ABC1234567:1": "Wohnzimmer Licht"}\n' > "$TREE/etc/names.json"
+
 export HM2MQTT_PID_FILE="$TMP/hm2mqtt.pid"
 export HM2MQTT_RC_SCRIPT="$TMP/rc.d-hm2mqtt"
 printf '#!/bin/sh\necho "rc.d called with $1"\n' > "$HM2MQTT_RC_SCRIPT"
@@ -149,6 +153,36 @@ out="$(cgi log.cgi 'sid=@1234567890@')"
 case "$out" in
     *'line two'*) pass "returns the log" ;;
     *) fail "returns the log" "$out" ;;
+esac
+
+echo "getnames.cgi / setnames.cgi"
+out="$(cgi getnames.cgi 'sid=@1234567890@')"
+case "$out" in
+    *'Wohnzimmer Licht'*) pass "returns the name file" ;;
+    *) fail "returns the name file" "$out" ;;
+esac
+out="$(cgi setnames.cgi 'sid=@1234567890@' '{"DEF4567890:1": "Rollladen"}')"
+case "$out" in
+    *'"ok":true'*) pass "writes valid names" ;;
+    *) fail "writes valid names" "$out" ;;
+esac
+case "$(cat "$TREE/etc/names.json")" in
+    *Rollladen*) pass "the file is replaced" ;;
+    *) fail "the file is replaced" "$(cat "$TREE/etc/names.json")" ;;
+esac
+out="$(cgi setnames.cgi 'sid=@1234567890@' '{"broken": ')"
+case "$out" in
+    *'"error"'*) pass "refuses malformed JSON" ;;
+    *) fail "refuses malformed JSON" "$out" ;;
+esac
+out="$(cgi setnames.cgi 'sid=@1234567890@' '{"ABC:1": 42}')"
+case "$out" in
+    *'must map to a string'*) pass "refuses a name that is not a string" ;;
+    *) fail "refuses a name that is not a string" "$out" ;;
+esac
+case "$(cat "$TREE/etc/names.json")" in
+    *Rollladen*) pass "a refused write leaves the file untouched" ;;
+    *) fail "a refused write leaves the file untouched" "$(cat "$TREE/etc/names.json")" ;;
 esac
 
 echo "api.cgi"

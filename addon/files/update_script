@@ -31,6 +31,9 @@ fi
 if [ -f $ADDON_DIR/etc/hm2mqtt.env ]; then
     cp $ADDON_DIR/etc/hm2mqtt.env /tmp/hm2mqtt.env.keep
 fi
+if [ -f $ADDON_DIR/etc/names.json ]; then
+    cp $ADDON_DIR/etc/names.json /tmp/hm2mqtt.names.keep
+fi
 
 rm -rf $ADDON_DIR
 cp -af $ADDON $ADDONS_DIR/
@@ -39,6 +42,9 @@ if [ -f /tmp/hm2mqtt.env.keep ]; then
     mv /tmp/hm2mqtt.env.keep $ADDON_DIR/etc/hm2mqtt.env
 else
     cp $ADDON_DIR/etc/default.env $ADDON_DIR/etc/hm2mqtt.env
+fi
+if [ -f /tmp/hm2mqtt.names.keep ]; then
+    mv /tmp/hm2mqtt.names.keep $ADDON_DIR/etc/names.json
 fi
 
 ln -sfn $ADDON_DIR/rc.d/$ADDON $CONF_DIR/rc.d/$ADDON

@@ -15,6 +15,15 @@
 - Outside the addon too: a state directory that cannot be created now reports the path and what to
   set instead of an ENOENT stack trace - a read-only container filesystem hits the same thing.
 
+### Added
+
+- **Addon: a names editor.** `HM2MQTT_NAME_FILE` ships preconfigured
+  (`/usr/local/addons/hm2mqtt/etc/names.json`) and is no longer an option in the UI; instead the
+  WebUI has a **Namen** tab that edits the file directly. Saving validates the JSON twice - in the
+  browser and, with the bundled node, in the addon before the file is replaced - because hm2mqtt
+  reads it at startup and refuses to start on malformed JSON. The file survives addon updates, like
+  the configuration.
+
 ## 3.4.1
 
 ### Fixed

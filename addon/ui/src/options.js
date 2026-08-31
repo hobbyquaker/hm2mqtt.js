@@ -30,6 +30,8 @@ export const NOT_APPLICABLE = {
     // binds there - there is nothing for a user to decide
     'listen-address': 'always loopback on the CCU',
     'init-address': 'always loopback on the CCU',
+    // the file lives in the addon and is edited under "Namen", so the path is not a user's business
+    'name-file': 'fixed path inside the addon; edited in the Namen tab',
 };
 
 export const OPTIONS = {
@@ -82,7 +84,6 @@ export const OPTIONS = {
         en: 'Datapoint that triggers a poll',
     },
     'ccu-timezone': {group: 'names', de: 'Zeitzone der CCU', en: 'Time zone of the CCU'},
-    'name-file': {group: 'names', de: 'Namensdatei', en: 'Name file'},
     'item-template': {
         group: 'names',
         widget: 'template',

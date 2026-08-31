@@ -57,6 +57,20 @@ export async function getLog(lines = 200) {
     return response.text();
 }
 
+/** The name file (address → name) as text, so the editor shows it exactly as it is on disk. */
+export async function getNames() {
+    const response = await fetch(`getnames.cgi?${query()}`);
+    return response.text();
+}
+
+/**
+ * Writes the name file. The addon validates it with node before replacing the file, because
+ * hm2mqtt refuses to start on malformed JSON.
+ * @param {string} text
+ */
+export const setNames = (text) =>
+    json(`setnames.cgi?${query()}`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: text});
+
 /**
  * The helpers that need node: discover, probe, mqtt-test, channels, preview.
  * @param {string} cmd
