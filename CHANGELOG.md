@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Addon UI: "invalid session" on every action** (reported by @sikousikou on an OpenCCU x86_64 VM).
+  The page itself opened, but saving the configuration or starting the service answered
+  `{"error":"invalid session"}`: the UI builds its requests with `URLSearchParams`, which
+  percent-encodes the `@` of a CCU session id (`@1234567890@` → `%401234567890%40`), and the CGIs
+  never decoded the query string, so the session check never matched. Query parameters are decoded
+  now.
+- The decoder itself is written out instead of the usual tcl `regsub`+`subst` one-liner, which runs
+  command substitution over its input — a query string containing `[…]` would have been executed.
+  Both are covered by `addon/test/cgi-test.sh`.
+
 ## 3.4.0
 
 ### Added

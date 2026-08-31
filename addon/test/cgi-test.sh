@@ -60,6 +60,25 @@ case "$out" in
     *'invalid session'*) pass "a malformed sid is refused" ;;
     *) fail "a malformed sid is refused" "$out" ;;
 esac
+# the UI builds its query with URLSearchParams, which percent-encodes the @ of a session id
+out="$(cgi getconfig.cgi 'sid=%401234567890%40')"
+case "$out" in
+    *'"HM2MQTT_NAME"'*) pass "a percent-encoded sid is accepted" ;;
+    *) fail "a percent-encoded sid is accepted" "$out" ;;
+esac
+
+# the decoder must not execute what it decodes: the usual regsub+subst idiom would run this
+out="$(cgi getconfig.cgi 'sid=%40%5Bexec%20touch%20%2Ftmp%2Fhm2mqtt-cgi-pwned%5D%40')"
+if [ -e /tmp/hm2mqtt-cgi-pwned ]; then
+    fail "a query string cannot execute commands" "the decoder ran [exec ...]"
+    rm -f /tmp/hm2mqtt-cgi-pwned
+else
+    pass "a query string cannot execute commands"
+fi
+case "$out" in
+    *'invalid session'*) pass "and such a sid is refused" ;;
+    *) fail "and such a sid is refused" "$out" ;;
+esac
 
 echo "getconfig.cgi"
 out="$(cgi getconfig.cgi 'sid=@1234567890@')"

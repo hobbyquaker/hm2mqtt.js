@@ -22,7 +22,7 @@ if {[lsearch -exact {discover probe mqtt-test channels preview} $cmd] < 0} {
 set argv_list [list $ADDON_DIR/app/scripts/addon-api.js $cmd]
 foreach key {host url username password template limit tls port timeout} {
     if {[dict exists $params $key]} {
-        set value [url_decode [dict get $params $key]]
+        set value [dict get $params $key]
         if {$value ne ""} {
             lappend argv_list --$key $value
         }

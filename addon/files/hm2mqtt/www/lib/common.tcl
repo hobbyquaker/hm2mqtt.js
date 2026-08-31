@@ -58,9 +58,3 @@ proc json_string {value} {
     return "\"$out\""
 }
 
-# Percent-decoding for values that arrive in a query string.
-proc url_decode {value} {
-    set value [string map {+ " "} $value]
-    regsub -all {%([0-9a-fA-F]{2})} $value {[format %c 0x\1]} value
-    return [subst -novariables -nobackslashes $value]
-}
