@@ -384,10 +384,20 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
   recorded script output, change detection, timestamps), `rpc` against an in-process fake
   server (init/ping/re-init timing with fake timers, multicall unpacking, counters), `config`
   (env, schema, secrets), installer via `deps` hooks.
-- **e2e** (`npm run test:e2e`, not in CI by default): hm-simulator + a local mosquitto, the 2.5
+- **e2e** (`npm run test:e2e`, in CI): hm-simulator + a broker - mosquitto when the machine has one,
+  otherwise aedes in-process, so it runs on a laptop without a broker installed - the 2.5
   scenario (`BidCoS-RF:1 PRESS_SHORT` appears on `hm/status/BidCoS-RF:1/PRESS_SHORT`, a
   `set` reaches the simulator) written against MQTT instead of log-line regexes.
 - **Parallel run against the real CCU** (§9) is the acceptance test for the drop-in claim.
+- **Open gap (2026-09-01): a moved topic template has no end-to-end test.** H-45 made whole topics
+  configurable; the e2e covers the defaults, and `subscribePattern`, the index lookup and the
+  `listen` registration are unit-tested in isolation, but nothing runs hm2mqtt with a template that
+  leaves `<name>/set/` against a broker. The case worth writing: a second instance in the existing
+  e2e configured with `smarthome/cmd/${channel}/${datapoint}` and `smarthome/state/${channel}/${datapoint}`,
+  asserting a write on the custom set topic reaches the simulator and the status appears where the
+  template says. That is exactly the path where the core's `<name>/set/#` interception bit once
+  already (it swallows the namespace before `listen`), so it deserves a test rather than a first
+  user.
 
 ---
 
