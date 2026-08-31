@@ -1,0 +1,41 @@
+name: Addon runtime
+
+# Builds the Node.js runtime that the CCU addon package bundles (addon/build-runtime.sh).
+# Manual for all architectures, automatic on changes to the script itself.
+
+on:
+  workflow_dispatch:
+    inputs:
+      node-major:
+        description: 'Node major version to package (default 24)'
+        required: false
+        default: '24'
+  pull_request:
+    paths: ['addon/**', '.github/workflows/addon-runtime.yml']
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # armv7l is the interesting one (musl repackage); the others are stock tarballs and only
+        # built on demand
+        arch: ${{ github.event_name == 'pull_request' && fromJSON('["armv7l"]') || fromJSON('["armv7l", "aarch64", "x86_64"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y patchelf
+      - name: Build runtime
+        run: addon/build-runtime.sh ${{ matrix.arch }}
+        env:
+          NODE_MAJOR: ${{ inputs.node-major || '24' }}
+      - name: Show what was produced
+        run: |
+          cat addon/work/${{ matrix.arch }}/runtime/versions
+          file addon/work/${{ matrix.arch }}/runtime/bin/node
+          du -sh addon/work/${{ matrix.arch }}/runtime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-runtime-${{ matrix.arch }}
+          path: addon/work/${{ matrix.arch }}/runtime
+          retention-days: 7
