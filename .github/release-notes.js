@@ -150,17 +150,36 @@ function installationSection(version) {
     if (rows.length > 2) {
         lines.push(
             '',
-            'The CCU addon brings its own Node.js runtime and needs nothing else on the CCU; it configures ' +
-                'itself through *Systemsteuerung → hm2mqtt* and talks to the local interface processes directly ' +
-                '(binrpc 32001/32000, hmipserver 32010, ReGa 8183). An MQTT broker is not part of it — point it ' +
-                'at one on your network, or install the Mosquitto addon.',
+            '### Which addon package?',
+            '',
+            'The architecture, not the firmware, decides — `ssh` into the CCU and run `uname -m`:',
+            '',
+            '| `uname -m` | Package |',
+            '| --- | --- |',
+            '| `armv7l` (CCU3, ELV-Charly, Raspberry Pi 2/3) | `armv7l` |',
+            '| `aarch64` (OpenCCU 64-bit on Raspberry Pi 4/5) | `aarch64` |',
+            '| `x86_64` (debmatic, OpenCCU in a VM) | `x86_64` |',
+            '',
+            'A CCU3 with the original eQ-3 firmware is always `armv7l`. The package is installed in the WebUI ' +
+                'under *Systemsteuerung → Zusatzsoftware → Zusatzsoftware installieren*, and afterwards a ' +
+                '**hm2mqtt** button appears in *Systemsteuerung* where everything is configured. Each package ' +
+                'has a `.sha256` next to it.',
+            '',
+            'What it does on the CCU: it brings its own Node.js and keeps everything inside ' +
+                "`/usr/local/addons/hm2mqtt`, so no other addon's Node.js is used or disturbed, and it talks to " +
+                'the interface processes directly (binrpc 32001/32000, hmipserver 32010, ReGa 8183) — no CCU ' +
+                'authentication, no firewall rules, nothing of hm2mqtt listening on the network. The one thing ' +
+                'you have to set is the broker URL: a CCU has no MQTT broker of its own, so point it at one on ' +
+                'your network or install the Mosquitto addon.',
         );
         if (beta) {
             lines.push(
                 '',
-                '> The addon packages are marked **beta**: they are built and tested in CI and the bundled ' +
-                    'runtime has been verified on a CCU3, but the package itself has not yet been installed on ' +
-                    'real hardware by anyone. Reports welcome.',
+                '> **The addon packages are beta.** They are built and tested in CI, and the bundled runtime ' +
+                    'and the whole test suite have been verified on a CCU3 (firmware 3.87.6, kernel 4.14) — but ' +
+                    'nobody has yet installed the package itself on real hardware. If you try it, a short report ' +
+                    'either way is very welcome; the beta marker comes off once one CCU3 and one OpenCCU install ' +
+                    'are confirmed.',
             );
         }
     }
