@@ -2,7 +2,15 @@ import {parseConfig} from 'mqtt-interfaces-core';
 import pkg from './package.json' with {type: 'json'};
 import {DEFAULT_INTERFACES, INTERFACE_NAMES} from './lib/interfaces.js';
 import {discoveryHint} from './lib/discovery.js';
-import {DEFAULT_ITEM_TEMPLATE, DEFAULT_SYSVAR_ITEM_TEMPLATE, DEFAULT_PROGRAM_ITEM_TEMPLATE} from './lib/topics.js';
+import {
+    applyItemTemplates,
+    DEFAULT_TOPIC_STATUS,
+    DEFAULT_TOPIC_SET,
+    DEFAULT_TOPIC_SYSVAR_STATUS,
+    DEFAULT_TOPIC_SYSVAR_SET,
+    DEFAULT_TOPIC_PROGRAM_STATUS,
+    DEFAULT_TOPIC_PROGRAM_SET,
+} from './lib/topics.js';
 
 export const OPTIONS = {
     'ccu-address': {
@@ -76,18 +84,43 @@ export const OPTIONS = {
             describe: 'device and channel names',
         },
     },
-    'item-template': {
+    'topic-status': {
         type: 'string',
         describe:
-            'item (topic part after status/ and set/) of a datapoint; ${field} placeholders with | fallbacks, every hm field',
-        default: DEFAULT_ITEM_TEMPLATE,
+            'status topic of a datapoint - the whole topic; ${field} placeholders with | fallbacks, ${prefix} is the instance name',
+        default: DEFAULT_TOPIC_STATUS,
     },
-    'sysvar-item-template': {
+    'topic-set': {
         type: 'string',
-        describe: 'item of a system variable',
-        default: DEFAULT_SYSVAR_ITEM_TEMPLATE,
+        describe: 'topic a datapoint is written on; what is subscribed follows from its literal part',
+        default: DEFAULT_TOPIC_SET,
     },
-    'program-item-template': {type: 'string', describe: 'item of a program', default: DEFAULT_PROGRAM_ITEM_TEMPLATE},
+    'topic-sysvar-status': {
+        type: 'string',
+        describe: 'status topic of a system variable',
+        default: DEFAULT_TOPIC_SYSVAR_STATUS,
+    },
+    'topic-sysvar-set': {
+        type: 'string',
+        describe: 'topic a system variable is written on',
+        default: DEFAULT_TOPIC_SYSVAR_SET,
+    },
+    'topic-program-status': {
+        type: 'string',
+        describe: 'status topic of a program',
+        default: DEFAULT_TOPIC_PROGRAM_STATUS,
+    },
+    'topic-program-set': {
+        type: 'string',
+        describe: 'topic a program is started on',
+        default: DEFAULT_TOPIC_PROGRAM_SET,
+    },
+    'item-template': {
+        type: 'string',
+        describe: 'deprecated, use --topic-status/--topic-set: item part of the classic topics',
+    },
+    'sysvar-item-template': {type: 'string', describe: 'deprecated, use --topic-sysvar-status/-set'},
+    'program-item-template': {type: 'string', describe: 'deprecated, use --topic-program-status/-set'},
     payload: {
         type: 'string',
         describe:
@@ -130,15 +163,17 @@ export const OPTIONS = {
     },
 };
 
-export default parseConfig({
-    pkg,
-    options: OPTIONS,
-    defaults: {name: 'hm'},
-    discovery: discoveryHint(),
-    examples: [
-        ['$0 --discover', 'find CCUs on the network and exit'],
-        ['$0 -a homematic-ccu3 -u mqtt://broker', 'run in the foreground'],
-        ['$0 -a 192.168.1.50 -i BidCos-RF,HmIP-RF --plain-tree state', 'two interfaces plus the plain mirror tree'],
-        ['sudo $0 --install -n hm -a homematic-ccu3 -u mqtt://broker', 'install as service hm2mqtt@hm'],
-    ],
-});
+export default applyItemTemplates(
+    parseConfig({
+        pkg,
+        options: OPTIONS,
+        defaults: {name: 'hm'},
+        discovery: discoveryHint(),
+        examples: [
+            ['$0 --discover', 'find CCUs on the network and exit'],
+            ['$0 -a homematic-ccu3 -u mqtt://broker', 'run in the foreground'],
+            ['$0 -a 192.168.1.50 -i BidCos-RF,HmIP-RF --plain-tree state', 'two interfaces plus the plain mirror tree'],
+            ['sudo $0 --install -n hm -a homematic-ccu3 -u mqtt://broker', 'install as service hm2mqtt@hm'],
+        ],
+    }),
+);

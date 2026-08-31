@@ -164,21 +164,39 @@ umlauts and `/` included; `+`, `#` and empty levels become `_`).
 | `<name>/rpc/<interface>/<method>/<callId>` → `<name>/response/<callId>` | in/out    | `--rpc-topics` only: JSON array of parameters, answer as JSON (or `{"error": …}`)                                  |
 | `<name>/maintenance/set/loglevel`, `…/restart`                          | in        | `error`/`warn`/`info`/`debug`; graceful restart (core, `--no-maintenance` disables)                                |
 
-### Item templates
+### Topic templates
 
-The part after `status/` and `set/` (the _item_) is rendered from a template with the fields of the
-`hm` block as placeholders, like node-red-contrib-ccu's topic templates — `--item-template`
-(default `${channelName|channel}/${datapoint}`), `--sysvar-item-template` and
-`--program-item-template` (default `${name}`). `|` is a fallback chain, field names are
-case-insensitive, an empty result becomes `_`. Examples: `${device}/${channelIndex}/${datapoint}`
-(addresses only), `${room|_}/${channelName}/${datapoint}`, `${iface}/${channel}/${datapoint}`,
-`sysvar/${name}`. `set` topics are resolved through a reverse index of every known channel and
-datapoint (the address form `<address>/<DATAPOINT>` always works too); channels rendering the same
-item are listed at start, the first one wins.
+Every topic is a template, whole. `${prefix}` is the instance name (`--name`, default `hm`), the
+other placeholders are the fields of the `hm` block:
 
-Use the channel name (`Licht Küche`) or the address (`OEQ1234567:1`) in `set` and `paramset`
-topics. `set/<channel>/<DATAPOINT>` with two channels sharing a name reaches the first one — the
-start-up log lists duplicate names.
+| Option                   | Default                                                 |
+| ------------------------ | ------------------------------------------------------- |
+| `--topic-status`         | `${prefix}/status/${channelName\|channel}/${datapoint}` |
+| `--topic-set`            | `${prefix}/set/${channelName\|channel}/${datapoint}`    |
+| `--topic-sysvar-status`  | `${prefix}/status/${name}`                              |
+| `--topic-sysvar-set`     | `${prefix}/set/${name}`                                 |
+| `--topic-program-status` | `${prefix}/status/${name}`                              |
+| `--topic-program-set`    | `${prefix}/set/${name}`                                 |
+
+The defaults render exactly the topics hm2mqtt has always used, so nothing moves unless you move it.
+`|` is a fallback chain, field names are case-insensitive, an empty result becomes `_`. Examples:
+`${prefix}/${room|_}/${channelName}/${datapoint}`, `smarthome/${iface}/${channel}/${datapoint}`,
+`${prefix}/status/${device}/${channelIndex}/${datapoint}`.
+
+What hm2mqtt subscribes follows from the literal part of the `set` templates: everything up to the
+first placeholder, plus `#` — `hm/set/#` for the default. A rendered level may contain slashes (a
+channel named `Haus/OG/Licht` is legitimate), so incoming topics are resolved by looking up the
+whole topic in an index of every known channel and datapoint, not by counting levels. Below the
+literal part the address form still works (`hm/set/OEQ1234567:1/STATE`), as do the commands
+(`hm/set/rega/sync`). Channels rendering the same topic are listed at start; the first one wins.
+
+Moving the templates moves the topics for everything subscribed to them, and Home Assistant
+discovery re-announces every entity, because the state and command topics it publishes come from
+these same templates.
+
+`--item-template`, `--sysvar-item-template` and `--program-item-template` named only the part after
+`<name>/status/`. They still work — each becomes the matching pair of topic templates — but the
+topic options replace them.
 
 ## Payloads
 

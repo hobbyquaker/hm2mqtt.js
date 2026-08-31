@@ -154,7 +154,13 @@
                 // a password still behind the placeholder cannot be tested from the browser
                 password: values.HM2MQTT_MQTT_PASSWORD === '********' ? '' : values.HM2MQTT_MQTT_PASSWORD,
             }),
-        preview: (template) => api.call('preview', {template, host: values.HM2MQTT_CCU_ADDRESS || '127.0.0.1', limit: 5}),
+        preview: (template) =>
+            api.call('preview', {
+                template,
+                prefix: values.HM2MQTT_NAME || 'hm',
+                host: values.HM2MQTT_CCU_ADDRESS || '127.0.0.1',
+                limit: 5,
+            }),
     };
 
     function switchLang() {

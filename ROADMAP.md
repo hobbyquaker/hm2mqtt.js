@@ -259,6 +259,16 @@ Dropped from 2.5: `--insecure` (→ `--ccu-insecure` for the CCU; broker CA via 
 - **G-5 — device-side timestamps.** `pubStatus(item, val, {ts, lc})` overrides the tracker's
   clock for values that carry their own timestamp (sysvars, `getValues` cache; also useful for
   cul2mqtt's learned intervals). Default unchanged.
+- **G-8 — topics an adapter can shape.** `pubStatus(item)` owns the topic (`<name>/status/<item>`),
+  and hm2mqtt now lets the user write whole topics (H-45), so it publishes with `adapter.publish()`
+  and its own `StatusTracker` and subscribes through `listen`. What it thereby reimplements is
+  small but real: republishing after a reconnect and clearing a retained topic when an item goes
+  away. The core could offer the shape instead — `createAdapter({topics: {status(item), set}})` —
+  keeping the tracker, the republish and the cleanup where they are and letting every adapter be
+  configurable the same way. Worth doing once hm2mqtt's templates have proven themselves in the
+  field; hm2mqtt would then be its first consumer, and the fleet spec gains an explicit "deviates
+  from the convention" flag instead of each adapter inventing one.
+
 - **G-7 — `--config-schema` truncated on a pipe — fixed in core 0.15.1 (2026-08-31), consumed
   here.** Both `--config-schema` and `--discover` printed with `console.log` and called
   `process.exit()` immediately; on macOS, where node writes pipes asynchronously, everything past
@@ -795,6 +805,7 @@ address, interfaces and names come from the local CCU by themselves.
 | H-42 | **Every release says which artefact belongs on which platform.** `.github/release-notes.js` gains an **Installation** section ahead of the changelog: platform → artefact (npm for any host with Node ≥ 20; `ghcr.io/hobbyquaker/hm2mqtt.js` amd64/arm64/armv7 for Docker; addon `armv7l` for CCU3 — official firmware and OpenCCU alike —, `aarch64` / `x86_64` for the OpenCCU images), rendered from the assets the release actually carries so it never advertises a missing file, with the `-beta` caveat of H-41.                                                                                                                                                                                                                              |
 | H-43 | **Logging**: the process writes to `var/hm2mqtt.log` inside the addon (rotated at 1 MB, one generation kept) — self-contained, no syslog assumptions, and the UI's log view just reads it. Service lifecycle events (start, stop, kill, misconfiguration) additionally go to syslog with `logger -t hm2mqtt`, so a CCU that forwards syslog — this one does — shows hm2mqtt's state alongside the rest of the system. Not a pipeline into `logger`, so the pid file holds node's own pid and `start-stop-daemon -K` works.                                                                                                                                                                                                                           |
 | H-44 | **rc.d verbs**: `init` (called by `run-parts` at S55 before the interfaces are up — prepare only, never start), `start`, `stop`, `restart`, `info` (the WebUI contract of §15.1), `uninstall`. Start through `start-stop-daemon -S -b -m -p /var/run/hm2mqtt.pid`, stop by pid file with SIGINT→SIGKILL escalation. Both binaries exist on CCU3 and OpenCCU.                                                                                                                                                                                                                                                                                                                                                                                         |
+| H-45 | **Topics are whole templates, not items** (user decision 2026-09-01): `--topic-status`, `--topic-set` and the sysvar/program pairs render the entire topic, with `${prefix}` for the instance name; the defaults render exactly what hm2mqtt published before, and `--item-template` and its siblings migrate into the corresponding pairs. hm2mqtt takes over publishing (`adapter.publish` with its own `StatusTracker`) and subscribing (`listen` on the literal part of the set templates plus `#`), because the core owns the topic in `pubStatus`. The cleaner home for this is a topic hook in the core — G-8, later.                                                                                                                         |
 
 ### 15.4 Local transport on the CCU — binrpc for BidCos, hmipserver direct
 

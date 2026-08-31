@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **Topics are configured whole, not as an "item".** `--topic-status` and `--topic-set` (and
+  `--topic-sysvar-status`/`-set`, `--topic-program-status`/`-set`) render the entire topic, with
+  `${prefix}` standing for the instance name:
+  `${prefix}/status/${channelName|channel}/${datapoint}` is the default and renders exactly the
+  topics hm2mqtt published before — nothing moves unless you move it. What is subscribed follows
+  from the literal part of the `set` templates (`hm/set/#` by default), and incoming topics are
+  resolved by looking up the whole topic, since a rendered level may contain slashes. The address
+  form and the commands keep working below that literal part.
+  `--item-template`, `--sysvar-item-template` and `--program-item-template` are deprecated and
+  migrate into the matching pairs, so an existing configuration is unaffected.
+  Home Assistant discovery publishes the same rendered topics, so changing a template re-announces
+  the entities.
 - **Addon UI: three tabs** — Konfiguration, Namen, Log — instead of panels toggled from the header.
   Service control, state and the language switch stay in the header above them.
 - `--json-payloads` and `--hm-payload` are no longer offered in the addon UI: both are implied by

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createAdapter, createLogger, runDiscovery, autoAddress} from 'mqtt-interfaces-core';
+import {createAdapter, createLogger, runDiscovery, autoAddress, StatusTracker} from 'mqtt-interfaces-core';
 import {Rega} from 'homematic-rega';
 import config from './config.js';
 import pkg from './package.json' with {type: 'json'};
@@ -21,7 +21,16 @@ import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
 import {castValue, isWriteable} from './lib/cast.js';
-import {sanitizeName, resolveSet, resolveParamset, plainValue, compileTemplate, ItemIndex} from './lib/topics.js';
+import {
+    sanitizeName,
+    resolveSet,
+    resolveParamset,
+    plainValue,
+    compileTemplate,
+    subscribePattern,
+    templateRemainder,
+    ItemIndex,
+} from './lib/topics.js';
 import {compileIgnore} from './lib/roles.js';
 import {discoveryModel} from './lib/hadiscovery.js';
 import {discoveryHint} from './lib/discovery.js';
@@ -142,7 +151,10 @@ const adapter = createAdapter({
             description: (iface, address) => metadata.description(iface, address, 'VALUES'),
             channelName,
             rooms: (address) => (regaSync ? regaSync.rooms(address) : undefined),
-            itemFor: (iface, address, datapoint) => renderItem(values.fields(iface, address, datapoint)).name,
+            statusTopicFor: (iface, address, datapoint) =>
+                renderStatus({...values.fields(iface, address, datapoint), ...topicFields}).name,
+            setTopicFor: (iface, address, datapoint) =>
+                renderSet({...values.fields(iface, address, datapoint), ...topicFields}).name,
             ignored,
             interfaces: enabled,
         }),
@@ -153,11 +165,22 @@ const adapter = createAdapter({
         rega: Boolean(regaSync),
         payload: payloadFormat,
     }),
-    onSet: handleSet,
+    // the set topics are configurable, so they are subscribed as absolute patterns rather than
+    // through the core's <name>/set/# convention; paramset and rpc stay where they were
+    listen: Object.fromEntries(
+        [
+            ...new Set(
+                [config.topicSet, config.topicSysvarSet, config.topicProgramSet].map((t) =>
+                    subscribePattern(t, topicFields),
+                ),
+            ),
+        ].map((pattern) => [pattern, handleSetTopic]),
+    ),
     subscriptions: {
         'paramset/#': handleParamset,
         ...(config.rpcTopics ? {'rpc/+/+/+': handleRpc} : {}),
     },
+    onMqttConnect: () => republishTopics(),
     onShutdown: shutdown,
 });
 const {log, pubStatus} = adapter;
@@ -208,10 +231,36 @@ const values = new ValueStore({
 });
 values.load();
 
-const renderItem = compileTemplate(config.itemTemplate);
-const renderSysvarItem = compileTemplate(config.sysvarItemTemplate);
-const renderProgramItem = compileTemplate(config.programItemTemplate);
-const itemIndex = new ItemIndex();
+/*
+ * Topics are rendered from templates, whole. `${prefix}` is the instance name, so the defaults
+ * produce exactly the topics hm2mqtt has always used; anything else is the user's choice, and what
+ * is subscribed follows from the literal part of the set templates.
+ */
+const topicFields = {prefix: config.name};
+const renderStatus = compileTemplate(config.topicStatus);
+const renderSet = compileTemplate(config.topicSet);
+const renderSysvarStatus = compileTemplate(config.topicSysvarStatus);
+const renderSysvarSet = compileTemplate(config.topicSysvarSet);
+const renderProgramStatus = compileTemplate(config.topicProgramStatus);
+const renderProgramSet = compileTemplate(config.topicProgramSet);
+/** what the plain mirror tree calls an item: the status topic without the `<name>/status/` head */
+const plainItem = (topic) => {
+    const head = `${config.name}/status/`;
+    return topic.startsWith(head) ? topic.slice(head.length) : topic;
+};
+/** full set topic -> what to write; rebuilt whenever names or devices change */
+const topicIndex = new ItemIndex();
+
+/*
+ * Publishing is ours rather than the core's pubStatus, because that one owns the topic
+ * (`<name>/status/<item>`) and here the topic is configurable. The tracker is the core's, so the
+ * payload shapes, change detection and the retained cache behave exactly as before.
+ */
+const status = new StatusTracker({json: config.jsonPayloads});
+function publishTopic(topic, value, {retain = true, extra, ts, lc} = {}) {
+    const {payload} = status.update(topic, value, {retain, extra, ts, lc});
+    adapter.publish(topic, payload, {retain});
+}
 let indexTimer = null;
 
 let enabled = [];
@@ -237,10 +286,11 @@ function itemOf(name) {
 }
 
 function rendered(render, fields, label) {
-    const {name: item, changed} = render(fields);
+    // every template may use ${prefix}
+    const {name: item, changed} = render({...fields, ...topicFields});
     if (changed && !warnedNames.has(label)) {
         warnedNames.add(label);
-        log.warn('item of', label, 'rendered with replacements as', JSON.stringify(item));
+        log.warn('topic of', label, 'rendered with replacements as', JSON.stringify(item));
     }
     return item;
 }
@@ -251,8 +301,8 @@ function rendered(render, fields, label) {
  */
 function rebuildIndex() {
     indexTimer = null;
-    itemIndex.clear('datapoint');
-    itemIndex.collisions.clear();
+    topicIndex.clear('datapoint');
+    topicIndex.collisions.clear();
     for (const iface of Object.keys(metadata.devices)) {
         for (const [address, device] of Object.entries(metadata.devices[iface])) {
             if (!device.PARENT) {
@@ -264,20 +314,22 @@ function rebuildIndex() {
             }
             for (const datapoint of Object.keys(description)) {
                 const target = {kind: 'datapoint', address, datapoint};
-                itemIndex.add(renderItem(values.fields(iface, address, datapoint)).name, target);
-                itemIndex.add(`${address}/${datapoint}`, target);
+                const fields = {...values.fields(iface, address, datapoint), ...topicFields};
+                topicIndex.add(renderSet(fields).name, target);
+                // the address form stays addressable whatever the template says
+                topicIndex.add(`${config.name}/set/${address}/${datapoint}`, target);
             }
         }
     }
-    if (itemIndex.collisions.size > 0) {
-        const list = [...itemIndex.collisions.keys()];
+    if (topicIndex.collisions.size > 0) {
+        const list = [...topicIndex.collisions.keys()];
         log.warn(
             'items shared by several channels (the first one wins on set):',
             list.slice(0, 10).join(', '),
             list.length > 10 ? `… ${list.length - 10} more` : '',
         );
     }
-    log.debug('item index rebuilt:', itemIndex.size, 'items');
+    log.debug('topic index rebuilt:', topicIndex.size, 'topics');
     adapter.markDiscoveryDirty();
     adapter.publishDiscovery();
 }
@@ -297,19 +349,30 @@ function publishPlain(item, value, retain) {
 }
 
 function publishMessage(message, {retain = true} = {}) {
-    const item = rendered(renderItem, message, message.datapointName);
+    const topic = rendered(renderStatus, message, message.datapointName);
     const extra = withHm ? {hm: hmBlock(message)} : undefined;
-    pubStatus(item, outValue(message.value), {retain, extra, ts: message.ts, lc: message.lc});
-    publishPlain(item, message.value, retain);
+    publishTopic(topic, outValue(message.value), {retain, extra, ts: message.ts, lc: message.lc});
+    publishPlain(plainItem(topic), message.value, retain);
 }
 
 function publishRega(message) {
-    const render = message.type === 'PROGRAM' ? renderProgramItem : renderSysvarItem;
-    const item = rendered(render, message, `${message.type} ${message.name}`);
-    itemIndex.add(item, {kind: message.type === 'PROGRAM' ? 'program' : 'sysvar', name: message.name});
+    const program = message.type === 'PROGRAM';
+    const label = `${message.type} ${message.name}`;
+    const topic = rendered(program ? renderProgramStatus : renderSysvarStatus, message, label);
+    const setTopic = rendered(program ? renderProgramSet : renderSysvarSet, message, label);
+    topicIndex.add(setTopic, {kind: program ? 'program' : 'sysvar', name: message.name});
     const extra = withHm ? {hm: hmBlock(message)} : undefined;
-    pubStatus(item, outValue(message.value), {retain: true, extra, ts: message.ts, lc: message.lc});
-    publishPlain(item, message.value, true);
+    publishTopic(topic, outValue(message.value), {retain: true, extra, ts: message.ts, lc: message.lc});
+    publishPlain(plainItem(topic), message.value, true);
+}
+
+/** Every configurable topic we published, again - the core does this only for its own items. */
+function republishTopics() {
+    for (const topic of status.state.keys()) {
+        if (status.isRetained(topic)) {
+            adapter.publish(topic, status.payload(topic), {retain: true});
+        }
+    }
 }
 
 function publishItem(item, value, {retain = true} = {}) {
@@ -479,13 +542,25 @@ async function setValue(address, datapoint, value) {
     return throttled(`${iface}.${address}.${datapoint}`, () => conn.methodCall('setValue', [address, datapoint, cast]));
 }
 
-async function handleSet(parts, value, topic) {
+/**
+ * A write on one of the configured set topics. The topic arrives whole, because a rendered level
+ * may contain slashes and the subscription is therefore `<literal>/#`: the topic is looked up as it
+ * is, and only when that misses does the positional form after `<name>/set/` get a chance
+ * (`hm/set/ABC1234567:1/STATE`, `hm/set/rega/sync`).
+ * @param {string} topic
+ * @param {*} value
+ */
+async function handleSetTopic(topic, value) {
     if (value === undefined) {
         log.warn('mqtt ignoring empty payload on', topic);
         return;
     }
-    // exact item first (rendered template, address form, variables, programs), then the positional form
-    const target = itemIndex.get(parts.join('/')) || resolveSet(parts, lookup);
+    let target = topicIndex.get(topic);
+    if (!target) {
+        const remainder = templateRemainder(config.topicSet, topic, topicFields);
+        const positional = remainder === null ? null : remainder.split('/').filter(Boolean);
+        target = positional && positional.length > 0 ? resolveSet(positional, lookup) : null;
+    }
     if (!target) {
         throw new Error('unknown channel, variable or program');
     }

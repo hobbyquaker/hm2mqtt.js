@@ -36,7 +36,8 @@ const ctx = (extra = {}) => ({
     description: (iface, address) => metadata.description(iface, address, 'VALUES'),
     channelName: (address) => names[address],
     rooms: (address) => (address.endsWith(':1') ? ['Flur'] : undefined),
-    itemFor: (iface, address, datapoint) => `${names[address] || address}/${datapoint}`,
+    statusTopicFor: (iface, address, datapoint) => `hm/status/${names[address] || address}/${datapoint}`,
+    setTopicFor: (iface, address, datapoint) => `hm/set/${names[address] || address}/${datapoint}`,
     interfaces: ['BidCos-RF', 'HmIP-RF'],
     ...extra,
 });

@@ -36,6 +36,10 @@ export const NOT_APPLICABLE = {
     // combinations nobody wants
     'json-payloads': 'covered by the payload format',
     'hm-payload': 'covered by the payload format',
+    // superseded by the topic templates, kept in the CLI so existing configs keep working
+    'item-template': 'replaced by the status and set topic templates',
+    'sysvar-item-template': 'replaced by the sysvar topic templates',
+    'program-item-template': 'replaced by the program topic templates',
     // On the CCU the connection is not a decision: the address is loopback, the interface processes
     // are talked to directly (binrpc for rfd and hs485d), and those ports carry neither TLS nor
     // authentication. Only *which* interfaces to use is left, and that is the one field kept.
@@ -76,18 +80,26 @@ export const OPTIONS = {
         en: 'Datapoint that triggers a poll',
     },
     'ccu-timezone': {group: 'names', de: 'Zeitzone der CCU', en: 'Time zone of the CCU'},
-    'item-template': {
+    'topic-status': {
         group: 'names',
         widget: 'template',
-        de: 'Item-Vorlage für Datenpunkte',
-        en: 'Item template for datapoints',
+        de: 'Status-Topic eines Datenpunkts',
+        en: 'Status topic of a datapoint',
     },
-    'sysvar-item-template': {
+    'topic-set': {
         group: 'names',
-        de: 'Item-Vorlage für Systemvariablen',
-        en: 'Item template for system variables',
+        widget: 'template',
+        de: 'Set-Topic eines Datenpunkts',
+        en: 'Set topic of a datapoint',
     },
-    'program-item-template': {group: 'names', de: 'Item-Vorlage für Programme', en: 'Item template for programs'},
+    'topic-sysvar-status': {
+        group: 'names',
+        de: 'Status-Topic einer Systemvariable',
+        en: 'Status topic of a system variable',
+    },
+    'topic-sysvar-set': {group: 'names', de: 'Set-Topic einer Systemvariable', en: 'Set topic of a system variable'},
+    'topic-program-status': {group: 'names', de: 'Status-Topic eines Programms', en: 'Status topic of a program'},
+    'topic-program-set': {group: 'names', de: 'Set-Topic eines Programms', en: 'Set topic of a program'},
 
     // --- Home Assistant ----------------------------------------------------------------------
     'ha-discovery': {group: 'ha', de: 'Discovery veröffentlichen', en: 'Publish discovery'},

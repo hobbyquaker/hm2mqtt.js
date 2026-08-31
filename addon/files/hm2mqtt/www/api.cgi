@@ -20,7 +20,7 @@ if {[lsearch -exact {discover probe mqtt-test channels preview} $cmd] < 0} {
 }
 
 set arguments [list $ADDON_DIR/app/scripts/addon-api.js $cmd]
-foreach key {host url username password template limit tls port timeout local} {
+foreach key {host url username password template prefix limit tls port timeout local} {
     if {[info exists params($key)] && ![string equal $params($key) ""]} {
         lappend arguments --$key $params($key)
     }

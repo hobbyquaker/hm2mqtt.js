@@ -10,7 +10,7 @@
  *   node scripts/addon-api.js probe      --host 127.0.0.1 [--tls]
  *   node scripts/addon-api.js mqtt-test  --url mqtt://host:1883 [--username u] [--password p]
  *   node scripts/addon-api.js channels   --host 127.0.0.1 [--limit 20]
- *   node scripts/addon-api.js preview    --host 127.0.0.1 --template '${channelName|channel}/${datapoint}'
+ *   node scripts/addon-api.js preview    --host 127.0.0.1 --template '${prefix}/status/${channelName|channel}/${datapoint}' [--prefix hm]
  *
  * Errors are JSON too ({"error": "..."}), so the UI never has to parse a stack trace.
  */
@@ -19,7 +19,7 @@ import Rega from 'homematic-rega';
 import {discover} from 'mqtt-interfaces-core';
 import {probeInterfaces, detectLocal, INTERFACE_NAMES} from '../lib/interfaces.js';
 import {discoveryHint, interfacesOf} from '../lib/discovery.js';
-import {compileTemplate, DEFAULT_ITEM_TEMPLATE} from '../lib/topics.js';
+import {compileTemplate, DEFAULT_TOPIC_STATUS} from '../lib/topics.js';
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -127,7 +127,8 @@ const commands = {
     },
 
     async preview() {
-        const template = String(args.template || DEFAULT_ITEM_TEMPLATE);
+        const template = String(args.template || DEFAULT_TOPIC_STATUS);
+        const prefix = String(args.prefix || 'hm');
         const render = compileTemplate(template);
         const limit = Number(args.limit || 5);
         const channels = await rega(args).getChannels();
@@ -135,6 +136,7 @@ const commands = {
         const examples = channels.slice(0, limit).map((ch, index) => {
             const datapoint = datapoints[index % datapoints.length];
             const fields = {
+                prefix,
                 channel: ch.address,
                 channelName: ch.name,
                 device: String(ch.address).split(':')[0],

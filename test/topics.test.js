@@ -10,6 +10,10 @@ import {
     compileTemplate,
     ItemIndex,
     DEFAULT_ITEM_TEMPLATE,
+    subscribePattern,
+    templateRemainder,
+    DEFAULT_TOPIC_STATUS,
+    DEFAULT_TOPIC_SET,
 } from '../lib/topics.js';
 
 describe('names', () => {
@@ -136,5 +140,42 @@ describe('item templates', () => {
         assert.deepEqual(index.get('Anwesenheit'), {kind: 'sysvar', name: 'Anwesenheit'});
         index.clear();
         assert.equal(index.size, 0);
+    });
+});
+
+describe('topic templates', () => {
+    test('the defaults render exactly the topics hm2mqtt has always used', () => {
+        const status = compileTemplate(DEFAULT_TOPIC_STATUS);
+        const set = compileTemplate(DEFAULT_TOPIC_SET);
+        const fields = {prefix: 'hm', channelName: 'Wohnzimmer Licht', channel: 'ABC1234567:1', datapoint: 'STATE'};
+        assert.equal(status(fields).name, 'hm/status/Wohnzimmer Licht/STATE');
+        assert.equal(set(fields).name, 'hm/set/Wohnzimmer Licht/STATE');
+        // no name from ReGa: the address carries the topic
+        const bare = {prefix: 'hm', channel: 'ABC1234567:1', datapoint: 'STATE'};
+        assert.equal(status(bare).name, 'hm/status/ABC1234567:1/STATE');
+    });
+
+    test('a template can put the topic anywhere', () => {
+        const render = compileTemplate('${prefix}/${room|_}/${channelName}/state');
+        assert.equal(
+            render({prefix: 'haus', room: 'Wohnzimmer', channelName: 'Licht'}).name,
+            'haus/Wohnzimmer/Licht/state',
+        );
+    });
+
+    test('the subscription follows from the literal part of a set template', () => {
+        const fields = {prefix: 'hm'};
+        assert.equal(subscribePattern(DEFAULT_TOPIC_SET, fields), 'hm/set/#');
+        assert.equal(subscribePattern('${prefix}/${room}/${channelName}/set', fields), 'hm/#');
+        assert.equal(subscribePattern('smarthome/cmd/${channel}/${datapoint}', fields), 'smarthome/cmd/#');
+        // a template without placeholders is one topic, subscribed as it is
+        assert.equal(subscribePattern('hm/commands', fields), 'hm/commands');
+    });
+
+    test('the positional fallback only applies below the literal part', () => {
+        const fields = {prefix: 'hm'};
+        assert.equal(templateRemainder(DEFAULT_TOPIC_SET, 'hm/set/ABC1234567:1/STATE', fields), 'ABC1234567:1/STATE');
+        assert.equal(templateRemainder(DEFAULT_TOPIC_SET, 'hm/set/rega/sync', fields), 'rega/sync');
+        assert.equal(templateRemainder(DEFAULT_TOPIC_SET, 'other/set/x/y', fields), null);
     });
 });
