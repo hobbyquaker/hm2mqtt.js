@@ -1,14 +1,19 @@
 #!/bin/tclsh
 #
-# Validates a CCU WebUI session id against ReGa. Every CGI that reads or changes something must
-# call this - the addon pages are reachable without authentication otherwise.
-# Same approach as RedMatic's lib/session.tcl (MIT, same author).
+# Session validation and query string handling.
+#
+# Everything here is written for **Tcl 8.2**, which is what the CCU3 firmware ships (`info
+# patchlevel` says 8.2.3, from 1999). That rules out `dict` (8.5), `eq`/`ne` in expressions (8.4),
+# `string is` (8.3), `{*}` (8.5) and `file normalize` (8.4) - all of which are fine on OpenCCU and
+# fail on a CCU3. Query parameters are therefore passed around as a plain name/value list that the
+# caller turns into an array.
 
 load tclrega.so
 
+# Is this a session the CCU WebUI handed out?
 proc check_session {sid} {
     if {[regexp {@([0-9a-zA-Z]{10})@} $sid all sidnr]} {
-        if {[lindex [rega_script "Write(system.GetSessionVarStr('$sidnr'));"] 1] ne ""} {
+        if {![string equal [lindex [rega_script "Write(system.GetSessionVarStr('$sidnr'));"] 1] ""]} {
             return 1
         }
     }
@@ -22,12 +27,14 @@ proc url_decode {value} {
     set length [string length $value]
     for {set i 0} {$i < $length} {incr i} {
         set char [string index $value $i]
-        if {$char eq "+"} {
+        if {[string equal $char "+"]} {
             append out " "
-        } elseif {$char eq "%" && $i + 2 < $length} {
+        } elseif {[string equal $char "%"] && $i + 2 < $length} {
             set hex [string range $value [expr {$i + 1}] [expr {$i + 2}]]
-            if {[string is xdigit -strict $hex]} {
-                append out [format %c [scan $hex %x]]
+            if {[regexp {^[0-9a-fA-F][0-9a-fA-F]$} $hex]} {
+                # scan needs a variable here: returning the value directly is Tcl 8.4 and up
+                scan $hex %x code
+                append out [format %c $code]
                 incr i 2
             } else {
                 append out $char
@@ -40,16 +47,17 @@ proc url_decode {value} {
     return [encoding convertfrom utf-8 $out]
 }
 
-# Query parameters, decoded. The UI builds its requests with URLSearchParams, which percent-encodes
-# the `@` of a session id (`@1234567890@` -> `%401234567890%40`), so a CGI that skips decoding sees
-# no valid session at all.
+# Query parameters as a name/value list, decoded: `array set params [query_params]`. The UI builds
+# its requests with URLSearchParams, which percent-encodes the `@` of a session id
+# (`@1234567890@` -> `%401234567890%40`), so a CGI that skips decoding sees no valid session at all.
 proc query_params {} {
-    set params [dict create]
-    catch {
-        foreach pair [split $::env(QUERY_STRING) &] {
-            if {[regexp {^([^=]*)=(.*)$} $pair dummy name value]} {
-                dict set params [url_decode $name] [url_decode $value]
-            }
+    set params [list]
+    if {[catch {set query $::env(QUERY_STRING)}]} {
+        return $params
+    }
+    foreach pair [split $query &] {
+        if {[regexp {^([^=]*)=(.*)$} $pair dummy name value]} {
+            lappend params [url_decode $name] [url_decode $value]
         }
     }
     return $params

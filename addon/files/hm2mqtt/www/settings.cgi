@@ -1,14 +1,13 @@
 #!/bin/tclsh
 #
-# The page behind the hm2mqtt button in Systemsteuerung. Checks the session, then serves the
-# configuration UI.
+# The page behind the hm2mqtt button in Systemsteuerung: checks the session, then serves the UI.
 
-source [file join [file dirname [file normalize [info script]]] lib common.tcl]
+source [file join [file dirname [info script]] lib common.tcl]
 
-set params [query_params]
+array set params [query_params]
 set sid ""
-if {[dict exists $params sid]} {
-    set sid [dict get $params sid]
+if {[info exists params(sid)]} {
+    set sid $params(sid)
 }
 
 puts "Content-Type: text/html; charset=utf-8\r\n"

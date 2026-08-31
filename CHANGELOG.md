@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Addon: the WebUI could not have worked on a CCU3.** Its firmware ships **Tcl 8.2.3** (1999), and
+  the CGIs used `dict` (8.5), `eq`/`ne` in expressions (8.4), `string is` (8.3), `{*}` (8.5),
+  `file normalize` (8.4) and `scan` without a variable (8.4) — every one a runtime error there. All
+  of it is rewritten for 8.2 and verified by running it on the CCU3's own interpreter: session ids,
+  spaces, umlauts and globs decode correctly, and `[exec …]` in a query string stays literal text.
+  OpenCCU was unaffected — it has a current Tcl, which is why this only surfaced now.
+- **Addon: the status line said "0 MB" and showed no uptime.** It asked `ps -o rss= -p <pid>`, and
+  busybox `ps` has no `-p`, so both values silently fell back to nothing. Memory and uptime now come
+  from `/proc/<pid>/status` and `/proc/<pid>/stat`, formatted as e.g. `142 MB · 4d 10h`.
+- The test harness gained a guard against Tcl newer than 8.2 in the shipped scripts, and checks the
+  memory and uptime values wherever `/proc` exists.
+
 ## 3.4.3
 
 ### Changed

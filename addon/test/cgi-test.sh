@@ -42,6 +42,7 @@ chmod +x "$HM2MQTT_RC_SCRIPT"
 
 failed=0
 pass() { echo "  ok   - $1"; }
+skip() { echo "  skip - $1 ($2)"; }
 fail() {
     echo "  FAIL - $1"
     echo "         $2"
@@ -133,6 +134,31 @@ case "$out" in
     *'"running":false'*) pass "reports a stopped service" ;;
     *) fail "reports a stopped service" "$out" ;;
 esac
+# with a live pid the status has to carry real memory and uptime - busybox ps has no -p, which is
+# how "0 MB" and an empty uptime got shipped
+echo $$ > "$HM2MQTT_PID_FILE"
+out="$(cgi service.cgi 'sid=@1234567890@&cmd=status')"
+case "$out" in
+    *'"running":true'*) pass "reports a running service" ;;
+    *) fail "reports a running service" "$out" ;;
+esac
+# memory and uptime come from /proc, which exists on the CCU and in CI but not on macOS
+if [ -r "/proc/$$/status" ]; then
+    rss="$(printf '%s' "$out" | sed -n 's/.*"rss":"\([0-9]*\)".*/\1/p')"
+    if [ -n "$rss" ] && [ "$rss" -gt 0 ] 2>/dev/null; then
+        pass "reports resident memory ($rss kB)"
+    else
+        fail "reports resident memory" "$out"
+    fi
+    case "$out" in
+        *'"uptime":""'*) fail "reports an uptime" "$out" ;;
+        *'"uptime":"'*) pass "reports an uptime" ;;
+        *) fail "reports an uptime" "$out" ;;
+    esac
+else
+    skip "reports resident memory and uptime" "no /proc on this host"
+fi
+rm -f "$HM2MQTT_PID_FILE"
 case "$out" in
     *'"VERSION_ADDON":"3.3.0-beta"'*) pass "reports the addon version" ;;
     *) fail "reports the addon version" "$out" ;;
@@ -191,6 +217,20 @@ case "$out" in
     *'unknown command'*) pass "only allows its four commands" ;;
     *) fail "only allows its four commands" "$out" ;;
 esac
+
+echo "tcl 8.2 compatibility (the CCU3 firmware ships 8.2.3)"
+# every one of these arrived after 8.2 and fails at runtime on a CCU3, where it would only show up
+# as a broken WebUI: dict 8.5, eq/ne 8.4, string is 8.3, {*} 8.5, file normalize 8.4, bare scan 8.4
+modern=""
+for pattern in 'dict [a-z]' '\{\*\}' 'string is ' '\] eq ' '\] ne ' '\$[a-zA-Z_]* eq ' '\$[a-zA-Z_]* ne ' 'file normalize' 'lassign ' '\[scan [^]]*%[a-z]\]'; do
+    hits="$(grep -rnE "$pattern" addon/files/hm2mqtt/www/*.cgi addon/files/hm2mqtt/www/lib/*.tcl addon/files/hm2mqtt/bin/update_addon 2>/dev/null | grep -v '^[^:]*:[0-9]*: *#' || true)"
+    [ -n "$hits" ] && modern="$modern$hits\n"
+done
+if [ -z "$modern" ]; then
+    pass "no tcl construct newer than 8.2 in the shipped scripts"
+else
+    fail "no tcl construct newer than 8.2 in the shipped scripts" "$(printf '%b' "$modern")"
+fi
 
 echo "the addon writes only inside its own directory"
 rc=addon/files/hm2mqtt/rc.d/hm2mqtt

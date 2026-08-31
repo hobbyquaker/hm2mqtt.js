@@ -1,16 +1,17 @@
 #!/bin/tclsh
 #
-# The last lines of the addon's log, as plain text. The service writes to
-# var/hm2mqtt.log; lifecycle events additionally go to syslog.
+# The last lines of the addon's log, as plain text.
 
-source [file join [file dirname [file normalize [info script]]] lib common.tcl]
+source [file join [file dirname [info script]] lib common.tcl]
 
-set params [require_session]
+array set params [require_session]
 
 set lines 200
-if {[dict exists $params lines] && [string is integer -strict [dict get $params lines]]} {
-    set lines [dict get $params lines]
-    if {$lines > 2000} {set lines 2000}
+if {[info exists params(lines)] && [regexp {^[0-9]+$} $params(lines)]} {
+    set lines $params(lines)
+    if {$lines > 2000} {
+        set lines 2000
+    }
 }
 
 puts "Content-Type: text/plain; charset=utf-8\r\n"

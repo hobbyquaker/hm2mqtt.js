@@ -1,17 +1,17 @@
 #!/bin/tclsh
 #
-# Bridge to scripts/addon-api.js for the things the UI cannot do on its own: probe the CCU
-# interfaces, test the broker connection, preview an item template. Each call is a short-lived
-# node process; the addon runs no server of its own.
+# Bridge to app/scripts/addon-api.js for the things the UI cannot do on its own: probe the CCU
+# interfaces, test the broker connection, preview an item template. Each call is a short-lived node
+# process; the addon runs no server of its own.
 
-source [file join [file dirname [file normalize [info script]]] lib common.tcl]
+source [file join [file dirname [info script]] lib common.tcl]
 
-set params [require_session]
+array set params [require_session]
 json_header
 
 set cmd ""
-if {[dict exists $params cmd]} {
-    set cmd [dict get $params cmd]
+if {[info exists params(cmd)]} {
+    set cmd $params(cmd)
 }
 
 if {[lsearch -exact {discover probe mqtt-test channels preview} $cmd] < 0} {
@@ -19,30 +19,29 @@ if {[lsearch -exact {discover probe mqtt-test channels preview} $cmd] < 0} {
     exit 1
 }
 
-set argv_list [list $ADDON_DIR/app/scripts/addon-api.js $cmd]
+set arguments [list $ADDON_DIR/app/scripts/addon-api.js $cmd]
 foreach key {host url username password template limit tls port timeout local} {
-    if {[dict exists $params $key]} {
-        set value [dict get $params $key]
-        if {$value ne ""} {
-            lappend argv_list --$key $value
-        }
+    if {[info exists params($key)] && ![string equal $params($key) ""]} {
+        lappend arguments --$key $params($key)
     }
 }
 
 set env(ICU_DATA) ""
 if {[file exists $ADDON_DIR/versions]} {
     set fd [open $ADDON_DIR/versions r]
-    foreach line [split [read $fd] "\n"] {
-        if {[regexp {^NODE_ICU_DATA=(.*)$} [string trim $line] dummy value]} {
+    set content [read $fd]
+    close $fd
+    foreach line [split $content "\n"] {
+        if {[regexp {^NODE_ICU_DATA="?([^"]*)"?$} [string trim $line] dummy value]} {
             set env(ICU_DATA) $value
         }
     }
-    close $fd
 }
 
-if {[catch {exec $ADDON_DIR/bin/node {*}$argv_list} output]} {
+# no {*} on tcl 8.2 (the CCU3 ships 8.2.3): build the command and eval it
+if {[catch {eval exec [linsert $arguments 0 $ADDON_DIR/bin/node]} output]} {
     # the helper prints JSON on failure too; pass it through when it looks like JSON
-    if {[string index [string trim $output] 0] eq "\{"} {
+    if {[string equal [string index [string trim $output] 0] "\{"]} {
         puts $output
     } else {
         puts "{\"error\":[json_string $output]}"

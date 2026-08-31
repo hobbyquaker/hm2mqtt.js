@@ -2,64 +2,127 @@
 #
 # Service control and status for the UI: ?cmd=start|stop|restart|status.
 
-source [file join [file dirname [file normalize [info script]]] lib common.tcl]
+source [file join [file dirname [info script]] lib common.tcl]
 
-set params [require_session]
+array set params [require_session]
 json_header
 
 set cmd "status"
-if {[dict exists $params cmd]} {
-    set cmd [dict get $params cmd]
+if {[info exists params(cmd)]} {
+    set cmd $params(cmd)
 }
 
 proc pid_of {} {
-    if {![file exists $::PID_FILE]} {
+    global PID_FILE
+    if {![file exists $PID_FILE]} {
         return ""
     }
-    set fd [open $::PID_FILE r]
+    set fd [open $PID_FILE r]
     set pid [string trim [read $fd]]
     close $fd
-    if {$pid eq "" || [catch {exec kill -0 $pid}]} {
+    if {[string equal $pid ""] || [catch {exec kill -0 $pid}]} {
         return ""
     }
     return $pid
 }
 
+# Resident memory in kB, from /proc: the CCU's busybox ps has no -p, so `ps -o rss= -p <pid>` fails
+# - which is how the status line came to say 0 MB.
+proc rss_kb {pid} {
+    if {[catch {set fd [open /proc/$pid/status r]}]} {
+        return 0
+    }
+    set data [read $fd]
+    close $fd
+    if {[regexp {VmRSS:[ \t]+([0-9]+)} $data dummy kb]} {
+        return $kb
+    }
+    return 0
+}
+
+# Seconds since the process started: /proc/uptime minus the process' own start time, field 22 of
+# /proc/<pid>/stat counted from after the comm field (which may contain spaces and brackets).
+# USER_HZ is 100 on every CCU kernel.
+proc uptime_seconds {pid} {
+    if {[catch {set fd [open /proc/$pid/stat r]}]} {
+        return ""
+    }
+    set stat [read $fd]
+    close $fd
+    set tail [string range $stat [expr {[string last ")" $stat] + 2}] end]
+    set starttime [lindex [split [string trim $tail] " "] 19]
+    if {![regexp {^[0-9]+$} $starttime]} {
+        return ""
+    }
+    if {[catch {set fd [open /proc/uptime r]}]} {
+        return ""
+    }
+    set uptime [lindex [split [read $fd]] 0]
+    close $fd
+    return [expr {int($uptime - ($starttime / 100.0))}]
+}
+
+proc format_uptime {seconds} {
+    if {[string equal $seconds ""]} {
+        return ""
+    }
+    if {$seconds < 0} {
+        return ""
+    }
+    set days [expr {$seconds / 86400}]
+    set hours [expr {($seconds % 86400) / 3600}]
+    set minutes [expr {($seconds % 3600) / 60}]
+    if {$days > 0} {
+        return "${days}d ${hours}h"
+    }
+    if {$hours > 0} {
+        return "${hours}h ${minutes}m"
+    }
+    if {$minutes > 0} {
+        return "${minutes}m [expr {$seconds % 60}]s"
+    }
+    return "${seconds}s"
+}
+
 proc versions {} {
-    set result [dict create]
-    if {[file exists $::ADDON_DIR/versions]} {
-        set fd [open $::ADDON_DIR/versions r]
-        foreach line [split [read $fd] "\n"] {
-            if {[regexp {^([A-Z_]+)=(.*)$} [string trim $line] dummy key value]} {
-                dict set result $key $value
+    global ADDON_DIR
+    set result [list]
+    if {[file exists $ADDON_DIR/versions]} {
+        set fd [open $ADDON_DIR/versions r]
+        set content [read $fd]
+        close $fd
+        foreach line [split $content "\n"] {
+            if {[regexp {^([A-Z_]+)="?([^"]*)"?$} [string trim $line] dummy key value]} {
+                lappend result $key $value
             }
         }
-        close $fd
     }
     return $result
 }
 
 switch -- $cmd {
-    start - stop - restart {
+    start -
+    stop -
+    restart {
         catch {exec $RC_SCRIPT $cmd} output
         set pid [pid_of]
-        puts "{\"ok\":true,\"cmd\":[json_string $cmd],\"output\":[json_string $output],\"running\":[expr {$pid ne "" ? "true" : "false"}]}"
+        set running [expr {[string equal $pid ""] ? "false" : "true"}]
+        puts "{\"ok\":true,\"cmd\":[json_string $cmd],\"output\":[json_string $output],\"running\":$running}"
     }
     status {
         set pid [pid_of]
         set rss 0
         set elapsed ""
-        if {$pid ne ""} {
-            catch {set rss [lindex [exec ps -o rss= -p $pid] 0]}
-            catch {set elapsed [string trim [exec ps -o etime= -p $pid]]}
+        if {![string equal $pid ""]} {
+            set rss [rss_kb $pid]
+            set elapsed [format_uptime [uptime_seconds $pid]]
         }
-        set v [versions]
-        set parts {}
-        lappend parts "\"running\":[expr {$pid ne "" ? "true" : "false"}]"
+        set parts [list]
+        lappend parts "\"running\":[expr {[string equal $pid ""] ? "false" : "true"}]"
         lappend parts "\"pid\":[json_string $pid]"
         lappend parts "\"rss\":[json_string $rss]"
         lappend parts "\"uptime\":[json_string $elapsed]"
-        dict for {key value} $v {
+        foreach {key value} [versions] {
             lappend parts "[json_string $key]:[json_string $value]"
         }
         puts "\{[join $parts ,]\}"

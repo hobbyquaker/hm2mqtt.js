@@ -1,21 +1,20 @@
 #!/bin/tclsh
 #
-# Writes the name file. The body is the JSON as the editor has it; it is validated with the bundled
-# node before it replaces the file, because hm2mqtt reads this at startup and refuses to start on
-# malformed JSON - an editor that can brick the service is not an editor.
+# Writes the name file. Validated with the bundled node before it replaces the file, because
+# hm2mqtt reads this at startup and refuses to start on malformed JSON - an editor that can stop the
+# service from starting is not an editor.
 
-source [file join [file dirname [file normalize [info script]]] lib common.tcl]
+source [file join [file dirname [info script]] lib common.tcl]
 
 require_session
 json_header
 
 set body [read stdin]
-set target $ADDON_DIR/etc/names.json
 set temporary $ADDON_DIR/var/names.json.new
 
 file mkdir $ADDON_DIR/var
 set fd [open $temporary w]
-fconfigure $fd -encoding utf-8
+catch {fconfigure $fd -encoding utf-8}
 puts -nonewline $fd $body
 close $fd
 
@@ -37,6 +36,6 @@ if {[catch {exec $ADDON_DIR/bin/node -e $check $temporary} result]} {
     exit 1
 }
 
-file rename -force $temporary $target
-exec /bin/sync
+file rename -force $temporary $NAMES_FILE
+catch {exec /bin/sync}
 puts "{\"ok\":true,\"names\":$result}"
