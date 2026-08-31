@@ -9,8 +9,10 @@
     import {GROUPS, OPTIONS, NOT_APPLICABLE, widgetFor} from './options.js';
     import Field from './Field.svelte';
 
-    let lang = $state(localStorage.getItem('hm2mqtt-lang') || 'de');
-    const t = (de, en) => (lang === 'de' ? de : en);
+    // German, and only German: a CCU is a German-market device, and a switch nobody flips is a
+    // button in the way. The English strings stay in the source as documentation of the intent.
+    const lang = 'de';
+    const t = (de, _en) => de;
 
     let schema = $state(null);
     let values = $state({});
@@ -163,11 +165,6 @@
             }),
     };
 
-    function switchLang() {
-        lang = lang === 'de' ? 'en' : 'de';
-        localStorage.setItem('hm2mqtt-lang', lang);
-    }
-
     onMount(() => {
         load();
         const timer = setInterval(refreshStatus, 10000);
@@ -176,11 +173,24 @@
 </script>
 
 <header>
-    <div class="title">
-        <strong>hm2mqtt</strong>
-        <span class="version">{status.VERSION_ADDON || ''}</span>
-        {#if status.NODE_VERSION}<span class="muted">node {status.NODE_VERSION}</span>{/if}
-    </div>
+    <a class="brand" href="https://github.com/hobbyquaker/hm2mqtt.js" target="_blank" rel="noreferrer">hm2mqtt</a>
+
+    <nav>
+        {#each [['config', t('Konfiguration', 'Configuration')], ['names', t('Namen', 'Names')], ['logs', t('Log', 'Logs')]] as [id, label]}
+            <button
+                class="tab"
+                class:active={tab === id}
+                onclick={() => {
+                    tab = id;
+                    if (id === 'names') loadNames();
+                    if (id === 'logs') loadLog();
+                }}>{label}</button
+            >
+        {/each}
+    </nav>
+
+    <div class="spacer"></div>
+
     <div class="state">
         <span class="dot" class:on={status.running}></span>
         {#if status.running}
@@ -188,28 +198,15 @@
         {:else}
             {t('gestoppt', 'stopped')}
         {/if}
+        {#if status.VERSION_ADDON}<span class="muted">v{status.VERSION_ADDON}</span>{/if}
+        {#if status.NODE_VERSION}<span class="muted">node {status.NODE_VERSION}</span>{/if}
     </div>
-    <div class="spacer"></div>
+
     <button onclick={() => control('restart')} disabled={busy !== ''}>{t('Neu starten', 'Restart')}</button>
     <button onclick={() => control(status.running ? 'stop' : 'start')} disabled={busy !== ''}>
         {status.running ? t('Stoppen', 'Stop') : t('Starten', 'Start')}
     </button>
-    <button onclick={switchLang} title="Sprache / language">{lang === 'de' ? 'EN' : 'DE'}</button>
 </header>
-
-<nav>
-    {#each [['config', t('Konfiguration', 'Configuration')], ['names', t('Namen', 'Names')], ['logs', t('Log', 'Logs')]] as [id, label]}
-        <button
-            class="tab"
-            class:active={tab === id}
-            onclick={() => {
-                tab = id;
-                if (id === 'names') loadNames();
-                if (id === 'logs') loadLog();
-            }}>{label}</button
-        >
-    {/each}
-</nav>
 
 {#if error}<div class="banner bad">{error}</div>{/if}
 {#if notice}<div class="banner good">{notice}</div>{/if}
@@ -219,6 +216,7 @@
         <div class="logbar">
             <strong>{t('Protokoll', 'Log')}</strong>
             <button onclick={loadLog}>{t('Aktualisieren', 'Refresh')}</button>
+            <span class="muted">{t('letzte 300 Zeilen', 'last 300 lines')}</span>
         </div>
         <pre>{logText}</pre>
     </section>
@@ -263,7 +261,7 @@
                 <section class="group">
                     <button class="grouphead" onclick={() => (open[group.id] = !open[group.id])}>
                         <span class="caret">{open[group.id] ? '▾' : '▸'}</span>
-                        {lang === 'de' ? group.de : group.en}
+                        {group.de}
                         <span class="count">{fields.length}</span>
                     </button>
                     {#if open[group.id]}
@@ -272,7 +270,7 @@
                                 <Field
                                     name={field.key}
                                     schema={field.schema}
-                                    label={lang === 'de' ? field.ui.de : field.ui.en}
+                                    label={field.ui.de}
                                     widget={widgetFor(field.key, field.schema)}
                                     bind:value={values[envOf(field.key)]}
                                     {lang}
@@ -308,33 +306,62 @@
         color: #222;
         background: #fafafa;
     }
+
+    /* one bar: name, tabs, then state and the actions on the right */
     header {
         display: flex;
         align-items: center;
-        gap: 0.6rem;
-        padding: 0.6rem 1rem;
+        gap: 0.5rem;
+        padding: 0 1rem;
+        min-height: 3rem;
         background: #fff;
         border-bottom: 1px solid #ddd;
         position: sticky;
         top: 0;
+        z-index: 2;
         flex-wrap: wrap;
     }
-    .title strong {
+    .brand {
         font-size: 1.05rem;
+        font-weight: 700;
+        color: #222;
+        text-decoration: none;
+        margin-right: 0.5rem;
     }
-    .version {
-        margin-left: 0.4rem;
-        color: #555;
+    nav {
+        display: flex;
+        gap: 0.15rem;
+        align-self: stretch;
     }
-    .muted {
-        color: #888;
-        margin-left: 0.4rem;
+    .tab {
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        background: none;
+        padding: 0 0.85rem;
+        font: inherit;
+        /* the weight never changes, so a tab keeps its width when it becomes active */
+        font-weight: 500;
+        color: #666;
+        cursor: pointer;
+    }
+    .tab:hover {
+        color: #222;
+    }
+    .tab.active {
+        border-bottom-color: #2d6cb5;
+        color: #111;
     }
     .spacer {
         flex: 1;
     }
     .state {
         color: #555;
+        white-space: nowrap;
+    }
+    .muted {
+        color: #888;
+        margin-left: 0.4rem;
     }
     .dot {
         display: inline-block;
@@ -347,10 +374,10 @@
     .dot.on {
         background: #4a8;
     }
+
     main,
     footer,
     .banner,
-    .log,
     .loading {
         max-width: 52rem;
         margin: 0 auto;
@@ -369,31 +396,7 @@
         background: #eef6ee;
         border-left: 3px solid #4a8;
     }
-    nav {
-        display: flex;
-        gap: 0.25rem;
-        padding: 0 1rem;
-        background: #fff;
-        border-bottom: 1px solid #ddd;
-        position: sticky;
-        top: 3.1rem;
-        z-index: 1;
-    }
-    .tab {
-        border: 0;
-        border-bottom: 2px solid transparent;
-        border-radius: 0;
-        background: none;
-        padding: 0.55rem 0.9rem;
-        font: inherit;
-        color: #555;
-        cursor: pointer;
-    }
-    .tab.active {
-        border-bottom-color: #2d6cb5;
-        color: #111;
-        font-weight: 600;
-    }
+
     .group {
         margin: 1rem 0;
         background: #fff;
@@ -420,6 +423,7 @@
     .fields {
         padding: 0.2rem 0.8rem 0.8rem;
     }
+
     footer {
         display: flex;
         align-items: center;
@@ -443,29 +447,51 @@
         opacity: 0.6;
         cursor: default;
     }
+
+    /* the log gets the whole page - that is what one reads a log on */
+    .log {
+        padding: 0.8rem 1rem 1rem;
+    }
     .log pre {
         background: #fff;
         border: 1px solid #e2e2e2;
-        padding: 0.6rem;
-        max-height: 22rem;
+        border-radius: 3px;
+        margin: 0.6rem 0 0;
+        padding: 0.7rem 0.9rem;
+        height: calc(100vh - 8.5rem);
         overflow: auto;
         font-size: 0.78rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     .logbar {
         display: flex;
         align-items: center;
         gap: 0.6rem;
-        margin-top: 1rem;
+    }
+
+    /* the names editor gets room to breathe */
+    .names {
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: 1.2rem 1rem 2rem;
+    }
+    .names .logbar {
+        margin: 0.9rem 0;
     }
     .names textarea {
         width: 100%;
         box-sizing: border-box;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 0.82rem;
-        padding: 0.6rem;
+        line-height: 1.5;
+        padding: 0.8rem 0.9rem;
         border: 1px solid #e2e2e2;
         border-radius: 3px;
         background: #fff;
+        min-height: 18rem;
+        resize: vertical;
     }
     .bad {
         color: #c55;

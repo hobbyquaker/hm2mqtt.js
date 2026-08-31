@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Addon UI: one bar.** Name, tabs, state and the buttons share the top bar — Konfiguration, Namen
+  and Log are no longer a second row. A tab keeps its width when it becomes active (the weight no
+  longer changes, only colour and underline), the log view uses the whole page, and the names editor
+  has room around it.
+- **German only.** A CCU is a German-market device, so the interface is German and the language
+  switch is gone.
+
 ## 3.5.0
 
 ### Changed

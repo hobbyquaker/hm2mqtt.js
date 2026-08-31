@@ -6,7 +6,7 @@
      */
     let {name, schema, label, widget, value = $bindable(), lang, actions} = $props();
 
-    const t = (de, en) => (lang === 'de' ? de : en);
+    const t = (de, _en) => de;
     let placeholder = $derived(schema.default === undefined || schema.default === null ? '' : String(schema.default));
 
     let running = $state('');
