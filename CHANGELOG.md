@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.4.7
+
+### Fixed
+
+- The package test added in 3.4.6 failed the armv7l and aarch64 release jobs: it tried to execute
+  the bundled node, which an x86_64 runner cannot do for an ARM binary. It now runs the binary only
+  where the architectures match and inspects it otherwise. 3.4.6 was published to npm and ghcr but
+  has no GitHub release and therefore no addon packages - use 3.4.7.
+
 ## 3.4.6
 
 ### Fixed

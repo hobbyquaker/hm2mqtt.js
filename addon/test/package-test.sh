@@ -72,15 +72,30 @@ case "$out" in
     *) fail "getnames.cgi reads the shipped name file" "$out" ;;
 esac
 
-# the runtime has to start from where the package puts it - only checkable when the host can
-# execute it at all, which for a Linux binary means a Linux host of the same architecture
+# The runtime has to start from where the package puts it - checkable only where the host can
+# execute it, i.e. a Linux host of the package's own architecture. The armv7l and aarch64 packages
+# are built on x86_64 runners, so there the binary is inspected rather than run.
 description="$(file -b "$ADDON/bin/node" 2>/dev/null)"
-if [ "$(uname -s)" = Linux ] && "$ADDON/bin/node" -e 'process.exit(0)' 2>/dev/null; then
-    pass "the bundled node runs ($("$ADDON/bin/node" --version))"
-elif [ "$(uname -s)" != Linux ]; then
-    echo "  skip - the bundled node runs (not a Linux host: $description)"
+case "$description" in
+    *x86-64*) package_arch=x86_64 ;;
+    *aarch64*) package_arch=aarch64 ;;
+    *ARM*) package_arch=armv7l ;;
+    *) package_arch=unknown ;;
+esac
+if [ "$(uname -s)" = Linux ] && [ "$package_arch" = "$(uname -m)" ]; then
+    if "$ADDON/bin/node" -e 'process.exit(0)' 2>/dev/null; then
+        pass "the bundled node runs ($("$ADDON/bin/node" --version))"
+    else
+        fail "the bundled node runs" "$description"
+    fi
+elif [ "$package_arch" = unknown ]; then
+    fail "the bundled node is an executable" "$description"
 else
-    fail "the bundled node runs" "$description"
+    echo "  skip - running the bundled node ($package_arch package on $(uname -s)/$(uname -m))"
+    case "$description" in
+        *ELF*executable*) pass "the bundled node is an $package_arch ELF executable" ;;
+        *) fail "the bundled node is an ELF executable" "$description" ;;
+    esac
 fi
 
 echo
