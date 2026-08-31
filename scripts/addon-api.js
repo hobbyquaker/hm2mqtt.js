@@ -17,7 +17,7 @@
 
 import Rega from 'homematic-rega';
 import {discover} from 'mqtt-interfaces-core';
-import {probeInterfaces, INTERFACE_NAMES} from '../lib/interfaces.js';
+import {probeInterfaces, detectLocal, INTERFACE_NAMES} from '../lib/interfaces.js';
 import {discoveryHint, interfacesOf} from '../lib/discovery.js';
 import {compileTemplate, DEFAULT_ITEM_TEMPLATE} from '../lib/topics.js';
 
@@ -84,8 +84,11 @@ const commands = {
 
     async probe() {
         const host = String(args.host || '127.0.0.1');
-        const found = await probeInterfaces(host, {tls: Boolean(args.tls), timeout: 2000});
-        return {host, interfaces: found, known: INTERFACE_NAMES};
+        // on the CCU the addon talks to the interface processes directly, so probe those ports -
+        // the proxy ports may answer as well, but they are not what will be connected to
+        const local = args.local === undefined ? await detectLocal(host) : args.local !== 'false';
+        const found = await probeInterfaces(host, {tls: Boolean(args.tls), local, timeout: 2000});
+        return {host, local, interfaces: found, known: INTERFACE_NAMES};
     },
 
     async 'mqtt-test'() {

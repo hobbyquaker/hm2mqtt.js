@@ -10,7 +10,7 @@
  */
 
 export const GROUPS = [
-    {id: 'ccu', de: 'Verbindung zur CCU', en: 'CCU connection', open: true},
+    {id: 'ccu', de: 'Schnittstellen der CCU', en: 'CCU interfaces', open: true},
     {id: 'mqtt', de: 'MQTT', en: 'MQTT', open: true},
     {id: 'names', de: 'Namen & Topics', en: 'Names & topics'},
     {id: 'ha', de: 'Home Assistant', en: 'Home Assistant'},
@@ -32,31 +32,21 @@ export const NOT_APPLICABLE = {
     'init-address': 'always loopback on the CCU',
     // the file lives in the addon and is edited under "Namen", so the path is not a user's business
     'name-file': 'fixed path inside the addon; edited in the Namen tab',
+    // On the CCU the connection is not a decision: the address is loopback, the interface processes
+    // are talked to directly (binrpc for rfd and hs485d), and those ports carry neither TLS nor
+    // authentication. Only *which* interfaces to use is left, and that is the one field kept.
+    'ccu-address': 'always 127.0.0.1 in the addon',
+    local: 'the addon always talks to the interface processes directly',
+    'bidcos-binrpc': 'implied by the direct connection - rfd and hs485d always over binrpc',
+    'ccu-username': 'the direct ports have no authentication',
+    'ccu-password': 'the direct ports have no authentication',
+    'ccu-tls': 'the direct ports carry no TLS',
+    'ccu-insecure': 'the direct ports carry no TLS',
 };
 
 export const OPTIONS = {
     // --- CCU ---------------------------------------------------------------------------------
-    'ccu-address': {group: 'ccu', widget: 'ccu-address', de: 'CCU-Adresse', en: 'CCU address'},
     interfaces: {group: 'ccu', widget: 'interfaces', de: 'Schnittstellen', en: 'Interfaces'},
-    local: {
-        group: 'ccu',
-        widget: 'tristate',
-        de: 'Direkt mit den CCU-Prozessen sprechen',
-        en: 'Talk to the CCU processes directly',
-    },
-    'ccu-username': {
-        group: 'ccu',
-        de: 'Benutzer (nur bei aktivierter Anmeldung)',
-        en: 'User (only with authentication)',
-    },
-    'ccu-password': {group: 'ccu', de: 'Passwort', en: 'Password'},
-    'ccu-tls': {group: 'ccu', de: 'TLS-Ports verwenden', en: 'Use the TLS ports'},
-    'ccu-insecure': {
-        group: 'ccu',
-        de: 'Selbstsigniertes Zertifikat akzeptieren',
-        en: 'Accept a self-signed certificate',
-    },
-    'bidcos-binrpc': {group: 'ccu', de: 'BidCos über BIN-RPC', en: 'BidCos over BIN-RPC'},
 
     // --- MQTT --------------------------------------------------------------------------------
     'mqtt-url': {group: 'mqtt', widget: 'mqtt-url', de: 'Broker-URL', en: 'Broker URL'},

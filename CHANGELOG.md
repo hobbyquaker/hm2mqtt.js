@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Addon: the CCU connection is not a configuration any more.** On the CCU there is nothing to
+  decide - the address is loopback, the interface processes are talked to directly (binrpc 32001 for
+  rfd, 32000 for hs485d, hmipserver 32010, ReGa 8183), and those ports carry neither TLS nor
+  authentication. So the address, `--local`, `--bidcos-binrpc`, the credentials and both TLS options
+  are gone from the WebUI; `HM2MQTT_CCU_ADDRESS=127.0.0.1` and `HM2MQTT_LOCAL=true` ship
+  preconfigured. What is left in that section is the one thing that is a choice: which interfaces to
+  use.
+- The interface probe behind "Schnittstellen ermitteln" now probes the ports the addon will actually
+  connect to (the process ports in local mode), not the lighttpd proxies in front of them.
+
 ## 3.4.2
 
 ### Fixed
