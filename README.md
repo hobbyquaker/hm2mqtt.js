@@ -46,6 +46,34 @@ docker run -d --name hm2mqtt --restart unless-stopped --network host -v hm2mqtt:
 Host networking, or publish 2126/2127 and set `HM2MQTT_INIT_ADDRESS` to the docker host's address
 so the CCU can call back. `--restart unless-stopped` brings it back after `maintenance/set/restart`.
 
+### On the CCU itself (addon package)
+
+For a setup without a server: hm2mqtt also ships as a CCU addon, installed in the WebUI under
+_Systemsteuerung → Zusatzsoftware_. Pick the package for your hardware from the
+[latest release](https://github.com/hobbyquaker/hm2mqtt.js/releases/latest):
+
+| Platform                                         | Package                                |
+| ------------------------------------------------ | -------------------------------------- |
+| CCU3 with the official eQ-3 firmware             | `hm2mqtt-ccu-armv7l-<version>.tar.gz`  |
+| OpenCCU 32-bit (CCU3 hardware, Raspberry Pi 2/3) | `hm2mqtt-ccu-armv7l-<version>.tar.gz`  |
+| OpenCCU 64-bit (Raspberry Pi 4/5)                | `hm2mqtt-ccu-aarch64-<version>.tar.gz` |
+| OpenCCU on x86_64 (debmatic, virtual machines)   | `hm2mqtt-ccu-x86_64-<version>.tar.gz`  |
+
+After the install a **hm2mqtt** button appears in _Systemsteuerung_: it configures every option of
+this README in a form, starts and stops the service and shows the log. The only setting that has to
+be made is the broker URL — a CCU has no MQTT broker of its own, so point hm2mqtt at one on your
+network (or install the Mosquitto addon).
+
+Everything the addon needs lives in `/usr/local/addons/hm2mqtt`, including its own Node.js runtime
+(the CCU3's firmware is far too old to run a current Node, so the addon brings a musl build that
+depends on nothing outside its own directory — another addon's Node.js is neither used nor
+disturbed). On the CCU it talks to the interface processes directly instead of through lighttpd:
+binrpc on 32001/32000 for BidCos, hmipserver on 32010, ReGa on 8183 — no CCU authentication, no
+firewall rules, and nothing of hm2mqtt listening on the network. `--local` / `--no-local` overrides
+the automatic detection.
+
+The addon packages are marked `-beta` until someone has confirmed an install on real hardware.
+
 ## Finding the CCU
 
 ```

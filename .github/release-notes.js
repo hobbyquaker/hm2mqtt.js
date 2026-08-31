@@ -112,7 +112,63 @@ function changelogSection(version) {
     );
 }
 
+/**
+ * The "which file do I need" table (H-42). npm and the Docker image always exist; the addon
+ * packages are listed only for the architectures this release actually carries, so the notes can
+ * never point at a file that was not built. `dist/` is where the release job collects them.
+ * @param {string} version
+ * @returns {string}
+ */
+function installationSection(version) {
+    const assets = fs.existsSync('dist') ? fs.readdirSync('dist').filter((name) => name.endsWith('.tar.gz')) : [];
+    const image = 'ghcr.io/' + (process.env.GITHUB_REPOSITORY || 'hobbyquaker/hm2mqtt.js').toLowerCase();
+
+    const rows = [
+        ['Any host with Node ≥ 20.19 (server, Raspberry Pi, NAS)', `\`npm install -g hm2mqtt@${version}\``],
+        ['Docker — amd64, arm64, armv7', `\`${image}:${version}\``],
+    ];
+
+    // architecture -> the platforms that need that package
+    const platforms = [
+        ['armv7l', 'CCU3 with the official eQ-3 firmware — *Systemsteuerung → Zusatzsoftware*'],
+        ['armv7l', 'OpenCCU 32-bit (CCU3 hardware, Raspberry Pi 2/3)'],
+        ['aarch64', 'OpenCCU 64-bit (Raspberry Pi 4/5)'],
+        ['x86_64', 'OpenCCU on x86_64 (debmatic, virtual machines)'],
+    ];
+    let beta = false;
+    for (const [arch, platform] of platforms) {
+        const asset = assets.find((name) => name.includes(`-ccu-${arch}-`));
+        if (!asset) continue;
+        if (asset.includes('-beta')) beta = true;
+        rows.push([platform, `[\`${asset}\`](${repoUrl}/releases/download/${tag}/${asset})`]);
+    }
+
+    const lines = ['## Installation', '', '| Platform | Install |', '| --- | --- |'];
+    for (const [platform, install] of rows) {
+        lines.push(`| ${platform} | ${install} |`);
+    }
+    if (rows.length > 2) {
+        lines.push(
+            '',
+            'The CCU addon brings its own Node.js runtime and needs nothing else on the CCU; it configures ' +
+                'itself through *Systemsteuerung → hm2mqtt* and talks to the local interface processes directly ' +
+                '(binrpc 32001/32000, hmipserver 32010, ReGa 8183). An MQTT broker is not part of it — point it ' +
+                'at one on your network, or install the Mosquitto addon.',
+        );
+        if (beta) {
+            lines.push(
+                '',
+                '> The addon packages are marked **beta**: they are built and tested in CI and the bundled ' +
+                    'runtime has been verified on a CCU3, but the package itself has not yet been installed on ' +
+                    'real hardware by anyone. Reports welcome.',
+            );
+        }
+    }
+    return lines.join('\n');
+}
+
 const out = [];
+out.push(installationSection(tag.replace(/^v/, '')), '');
 const section = changelogSection(tag.replace(/^v/, ''));
 if (section) {
     out.push('## Changelog', '', section, '');
