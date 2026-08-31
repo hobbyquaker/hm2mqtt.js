@@ -10,26 +10,16 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
 
 import {GROUPS, OPTIONS, NOT_APPLICABLE, widgetFor} from '../addon/ui/src/options.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// via a file, not a pipe: --config-schema prints and calls process.exit(), which truncates a
-// pipe at its buffer (8 KB) while a file write is synchronous and always complete - core G-7.
-const schemaFile = path.join(os.tmpdir(), `hm2mqtt-schema-${process.pid}.json`);
-const fd = fs.openSync(schemaFile, 'w');
-try {
-    execFileSync(process.execPath, [path.join(root, 'index.js'), '--config-schema'], {
-        stdio: ['ignore', fd, 'inherit'],
-    });
-} finally {
-    fs.closeSync(fd);
-}
-const schema = JSON.parse(fs.readFileSync(schemaFile, 'utf8'));
-fs.rmSync(schemaFile, {force: true});
+// Through a pipe on purpose: --config-schema used to truncate there at 8 KB (core G-7, fixed in
+// mqtt-interfaces-core 0.15.1), so reading it this way keeps that fix honest.
+const schema = JSON.parse(
+    execFileSync(process.execPath, [path.join(root, 'index.js'), '--config-schema'], {encoding: 'utf8'}),
+);
 const options = Object.keys(schema.properties);
 
 describe('addon configuration UI', () => {

@@ -20,6 +20,13 @@
   has. Detected by probing those ports when the address is local; `--no-local` forces the proxy
   ports. Nothing changes for the usual setup with a CCU somewhere on the network.
 
+### Changed
+
+- Requires mqtt-interfaces-core ^0.15.1, which fixes `--config-schema` and `--discover` truncating
+  when their output goes to a pipe (`hm2mqtt --config-schema | jq` lost everything past 8 KB on
+  macOS). Nothing else changes: no option was added, removed or altered by the six minor versions
+  in between.
+
 ## 3.3.0
 
 ### Added

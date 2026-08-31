@@ -259,19 +259,14 @@ Dropped from 2.5: `--insecure` (→ `--ccu-insecure` for the CCU; broker CA via 
 - **G-5 — device-side timestamps.** `pubStatus(item, val, {ts, lc})` overrides the tracker's
   clock for values that carry their own timestamp (sysvars, `getValues` cache; also useful for
   cul2mqtt's learned intervals). Default unchanged.
-- **G-7 — `--config-schema` truncates on a pipe — fixed in core 0.15.1 (2026-08-31), not yet
-  consumed here.** hm2mqtt pins `^0.9.0` and runs 0.9.0, so the file-redirect workarounds in
-  `addon/build.sh` and `test/addon-ui.test.js` stay until the core dependency is moved forward
-  (0.9 → 0.15 is six minors of a 0.x line, i.e. a job of its own). The fix itself: `lib/print.js`
-  writes synchronously and both `--config-schema` and `--discover` use it, with a regression test
-  that a 200 KB write survives an immediate `process.exit()`. Original diagnosis: (found 2026-08-31 while building the addon UI,
-  which renders from that schema). `parseConfig` prints the JSON with `console.log` and calls
-  `process.exit(0)` immediately; a write to a pipe is asynchronous, so everything past the pipe
-  buffer is lost — measured: exactly 8192 of 9526 bytes reach the reader, non-deterministically
-  (`hm2mqtt --config-schema | jq` succeeds or fails depending on how fast the consumer drains).
-  Fix in the core: `fs.writeSync(1, …)` before exiting, or set `process.exitCode` and let node
-  flush. Affects every adapter. Until then callers must redirect to a file, which both
-  `addon/build.sh` and `test/addon-ui.test.js` do.
+- **G-7 — `--config-schema` truncated on a pipe — fixed in core 0.15.1 (2026-08-31), consumed
+  here.** Both `--config-schema` and `--discover` printed with `console.log` and called
+  `process.exit()` immediately; on macOS, where node writes pipes asynchronously, everything past
+  the pipe buffer was dropped — 8192 of 9526 bytes, intermittently, which surfaced as a JSON parse
+  error while building the addon UI that renders from that schema. `lib/print.js` writes
+  synchronously now. hm2mqtt moved from core 0.9.0 to ^0.15.1 with it (no option added, removed or
+  changed in `--config-schema`), and `test/addon-ui.test.js` reads the schema through a pipe again
+  so the fix stays honest.
 
 - **G-6 — subscriptions outside `<name>/set/#`.** `createAdapter({subscriptions: {'paramset/#':
 handler, 'rpc/+/+/+': handler}})` subscribes `<name>/<pattern>` on every (re)connect and routes
