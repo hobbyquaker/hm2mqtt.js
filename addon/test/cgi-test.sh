@@ -35,6 +35,7 @@ mkdir -p "$TREE/bin"
 ln -sf "$(command -v node)" "$TREE/bin/node"
 printf '{"ABC1234567:1": "Wohnzimmer Licht"}\n' > "$TREE/etc/names.json"
 
+export HM2MQTT_ADDON_DIR="$TREE"
 export HM2MQTT_PID_FILE="$TMP/hm2mqtt.pid"
 export HM2MQTT_RC_SCRIPT="$TMP/rc.d-hm2mqtt"
 printf '#!/bin/sh\necho "rc.d called with $1"\n' > "$HM2MQTT_RC_SCRIPT"
@@ -51,12 +52,31 @@ fail() {
 
 STUB="$PWD/addon/test/stub.tcl"
 
+# how the CCU serves the page: /usr/local/etc/config/addons/www/<addon> is a symlink to the addon's
+# www directory, and lighttpd invokes the CGI through it
+mkdir -p "$TMP/config/addons/www"
+ln -sfn "$TREE/www" "$TMP/config/addons/www/hm2mqtt"
+printf '<h1>UI</h1>\n' > "$TREE/www/index.html"
+
 # cgi <script> <query> [stdin]
 # Invoked the way lighttpd does it: working directory is the script's own, the script is named
 # relative to it. Passing an absolute path instead hides whether the addon can find itself.
 cgi() {
     (cd "$TREE/www" && QUERY_STRING="$2" tclsh "$STUB" "$1" <<<"${3:-}" 2>&1)
 }
+
+echo "the page as lighttpd serves it (through the addons/www symlink)"
+for style in relative absolute; do
+    if [ "$style" = relative ]; then
+        out="$(cd "$TMP/config/addons/www/hm2mqtt" && QUERY_STRING='sid=@1234567890@' tclsh "$STUB" settings.cgi 2>&1)"
+    else
+        out="$(cd / && QUERY_STRING='sid=@1234567890@' tclsh "$STUB" "$TMP/config/addons/www/hm2mqtt/settings.cgi" 2>&1)"
+    fi
+    case "$out" in
+        *'<h1>UI</h1>'*) pass "settings.cgi serves the UI ($style through the symlink)" ;;
+        *) fail "settings.cgi serves the UI ($style through the symlink)" "$out" ;;
+    esac
+done
 
 echo "session"
 out="$(HM2MQTT_TEST_SESSION=invalid cgi getconfig.cgi 'sid=@1234567890@')"

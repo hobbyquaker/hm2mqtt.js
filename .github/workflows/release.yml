@@ -83,6 +83,9 @@ jobs:
       - run: addon/test/cgi-test.sh
       # -beta until the package has been installed on real CCU hardware (H-41)
       - run: addon/build.sh ${{ matrix.arch }} --beta
+      # unpacks the package into the layout a CCU installs it into, symlink included, and serves
+      # the pages the way lighttpd does
+      - run: addon/test/package-test.sh dist/*.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: addon-${{ matrix.arch }}

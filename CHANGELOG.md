@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.4.6
+
+### Fixed
+
+- **Addon: the configuration page was blank** (3.4.4 and 3.4.5). The WebUI reaches the CGIs through
+  `/usr/local/etc/config/addons/www/hm2mqtt`, a symlink to the addon's `www` directory, so deriving
+  the addon's location from the script's own path landed in the symlink's parent —
+  `/usr/local/etc/config/addons/www` — and `index.html` could not be opened. The header had already
+  been sent and the error went to stderr, which is why the browser showed a white page and no
+  console error. `file normalize` had been resolving that symlink until it was replaced for Tcl 8.2
+  in 3.4.4. The addon's install path is fixed by the installer, so it is simply known now.
+- The test harness serves the CGIs through such a symlink, and a new package test unpacks the built
+  package into the layout a CCU installs it into and calls the pages the way lighttpd does — both
+  run in CI on every build. Neither existed before, which is why the source tree looked healthy
+  while the installed addon was not.
+
 ## 3.4.5
 
 ### Fixed

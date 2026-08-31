@@ -42,6 +42,8 @@ jobs:
         run: addon/build.sh ${{ matrix.arch }} --beta
         env:
           NODE_MAJOR: ${{ inputs.node-major || '24' }}
+      - name: Test the built package as installed
+        run: addon/test/package-test.sh dist/*.tar.gz
       - name: Inspect the result
         run: |
           cat addon/work/${{ matrix.arch }}/pkg/hm2mqtt/versions
