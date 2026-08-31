@@ -5,8 +5,18 @@
 
 source [file join [file dirname [info script]] session.tcl]
 
-# www/lib/common.tcl -> www -> the addon directory
-set ADDON_DIR [file dirname [file dirname [file dirname [info script]]]]
+# www/lib/common.tcl -> www -> the addon directory. `info script` is whatever path the caller was
+# invoked with, and lighttpd runs a CGI as a bare filename with the working directory set to its
+# own - so a relative path has to be made absolute here. `file normalize` would do it in one call
+# and arrived in Tcl 8.4; the CCU3 has 8.2.3.
+set SCRIPT_PATH [info script]
+if {![string equal [file pathtype $SCRIPT_PATH] "absolute"]} {
+    set SCRIPT_PATH [file join [pwd] $SCRIPT_PATH]
+}
+# "./lib/common.tcl" joined with the working directory keeps its "." segment, and every one of those
+# costs a level when walking up with [file dirname]
+regsub -all {/\./} $SCRIPT_PATH "/" SCRIPT_PATH
+set ADDON_DIR [file dirname [file dirname [file dirname $SCRIPT_PATH]]]
 set ENV_FILE $ADDON_DIR/etc/hm2mqtt.env
 set NAMES_FILE $ADDON_DIR/etc/names.json
 set LOG_FILE $ADDON_DIR/var/hm2mqtt.log

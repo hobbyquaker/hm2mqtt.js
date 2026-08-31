@@ -49,9 +49,13 @@ fail() {
     failed=1
 }
 
+STUB="$PWD/addon/test/stub.tcl"
+
 # cgi <script> <query> [stdin]
+# Invoked the way lighttpd does it: working directory is the script's own, the script is named
+# relative to it. Passing an absolute path instead hides whether the addon can find itself.
 cgi() {
-    QUERY_STRING="$2" tclsh addon/test/stub.tcl "$TREE/www/$1" <<<"${3:-}" 2>&1
+    (cd "$TREE/www" && QUERY_STRING="$2" tclsh "$STUB" "$1" <<<"${3:-}" 2>&1)
 }
 
 echo "session"

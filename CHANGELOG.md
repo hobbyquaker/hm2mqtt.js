@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Addon: the configuration page was blank in 3.4.4.** Replacing `file normalize` (Tcl 8.4) for the
+  CCU3's 8.2 left the addon unable to work out where it lives when lighttpd invokes a CGI the way it
+  does - as a bare filename, with the working directory set to the script's own. The resulting path
+  was one level short, `index.html` could not be opened, and the error went to stderr where no
+  browser sees it. The path is made absolute and its `./` segments collapsed, verified on the CCU3's
+  own interpreter for all three invocation forms.
+- The test harness now invokes the CGIs exactly as lighttpd does, relative and from the script's own
+  directory. It had been passing absolute paths, which is why it never saw this.
+
 ## 3.4.4
 
 ### Fixed
