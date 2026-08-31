@@ -403,6 +403,8 @@ Skeleton per the core README §2 (copy from cul2mqtt): `index.js`, `config.js`, 
 - **Drop `--plain-tree`** once nothing consumes `hm/state` (OQ-43) — a 4.0 break. The `hm`
   block is not trimmed: its fields are consumed (OQ-46, 2026-08-27).
 - binrpc 4.0 / homematic-xmlrpc 2.0 without `binary`/`put`/`sax 0.4`.
+- **CCU addon package** (CCU3 armv7l, OpenCCU aarch64/x86_64) with a Svelte config UI and local
+  transport defaults — research and plan in §15 (2026-08-31).
 
 ---
 
@@ -572,3 +574,218 @@ Deliberately **not** taken over: CCU-Jack's virtual devices (foreign MQTT device
 VirtualDevices interface), loom's REST/WebSocket/MCP/web UI (she manages, MQTT is the API), multi-CCU
 in one process (fleet pattern: one instance per CCU, `hm2mqtt@ccu2`), running on the CCU itself
 (OQ-44).
+
+---
+
+## 15. hm2mqtt as CCU addon package (2026-08-31)
+
+Second distribution channel next to npm and Docker: an installable **CCU addon** (`Systemsteuerung →
+Zusatzsoftware`) so hm2mqtt runs on the CCU itself — for people without a home server. This does
+**not** change this fleet's own deployment: `hm2mqtt@hm3` stays on the home server (H-7, OQ-44
+answer unchanged); the addon is for other users, and it is the honest answer to "wie unter RedMatic,
+nur ohne Node-RED".
+
+Supported platforms (user decision 2026-08-31): **CCU3 (armv7l)** and **OpenCCU** (ex RaspberryMatic)
+for **aarch64** and **x86_64**. No armv6l (Pi Zero/1), no i686 — RedMatic carried both and nobody
+used them.
+
+Research base: `~/WebstormProjects/RedMatic` (v8.0.0-alpha, addon layout only — the firmware patches
+beyond 7.2.1 are deliberately ignored), `ccu-addon-mosquitto` (the minimal addon), `ccu-addon-nodejs`
+(2018, dead), `ccu-addon` (the unfinished howto), plus the nodejs.org and unofficial-builds dist
+indexes (checked 2026-08-31).
+
+### 15.1 Anatomy of a CCU addon package
+
+A package is a plain `tar.gz` whose **root** holds:
+
+| Entry           | Purpose                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hm2mqtt/`      | the whole tree, copied verbatim to `/usr/local/addons/hm2mqtt/` (`cp -af`)                                                                                          |
+| `update_script` | `#!/bin/sh`, run by the WebUI installer with cwd = extracted dir; does install **and** update **and** migration                                                     |
+| `hm2mqtt.cfg`   | one tcl line `{CONFIG_URL /addons/hm2mqtt/settings.cgi CONFIG_DESCRIPTION {de {<li>…</li>} en {…}} ID hm2mqtt CONFIG_NAME hm2mqtt}` — the button in Systemsteuerung |
+| `update_addon`  | symlink to `hm2mqtt/bin/update_addon`, the helper that writes/removes the entry in `/usr/local/etc/config/hm_addons.cfg` (RedMatic ships its own copy; do the same) |
+
+`update_script` (RedMatic's, minus the Node-RED specifics): `mount /usr/local` if unmounted →
+`$CONF_DIR/rc.d/hm2mqtt stop` if present (and set `EXITCODE=0`, i.e. update; `10` = first install,
+which makes the WebUI ask for a reboot) → `cp -af hm2mqtt /usr/local/addons/` → first-install
+defaults (`etc/hm2mqtt.env` from `etc/default.env` only if absent — never overwrite a user config) →
+symlinks `bin/hm2mqtt → /usr/local/etc/config/rc.d/hm2mqtt`, `www → /usr/local/etc/config/addons/www/hm2mqtt`
+→ `touch /usr/local/etc/config/hm_addons.cfg; ./update_addon hm2mqtt hm2mqtt.cfg` → monit config link
+
+- `monit reload` where `/usr/bin/monit` exists → `sync; exit $EXITCODE`.
+
+`bin/hm2mqtt` is the rc.d script: `start|stop|restart|info|uninstall`. `info` is the contract with the
+WebUI — it prints `Info:` (an HTML snippet with the logo), `Name:`, `Version:`, `Update:`
+(`/addons/hm2mqtt/update_check.cgi`), `Config-Url:` (`/addons/hm2mqtt/settings.cgi`),
+`Operations: restart uninstall`. Start via `start-stop-daemon -S -q -b -m -p /var/run/hm2mqtt.pid`,
+log through `logger -t hm2mqtt -p daemon.info`, stop via the pid file with SIGINT → SIGKILL escalation.
+`uninstall` stops, calls `update_addon hm2mqtt` (removes the button) and deletes the tree and symlinks.
+
+`update_check.cgi` (tclsh, from ccu-addon-mosquitto): `wget -qO-` the GitHub
+`releases/latest` API, regex the `tag_name`, print the version; `?cmd=download` redirects to the
+release page. That is the whole "Update verfügbar" mechanism.
+
+**Backup**: the CCU backup tars `/usr/local`. OpenCCU honours `.nobackup` marker files
+(`tar --exclude-tag=.nobackup`); on CCU3 RedMatic patches `/www/config/cp_security.cgi` to add the
+flag. We will **not** patch the read-only rootfs — see H-32.
+
+### 15.2 The Node.js binary — bundle it, pinned to 22
+
+Verified 2026-08-31 against `https://nodejs.org/dist/index.json` and
+`https://unofficial-builds.nodejs.org/download/release/index.json`:
+
+- The last official release with a **`linux-armv7l`** build is **v23.11.1**. Node 24 (Krypton) and 26
+  ship `linux-arm64` / `linux-x64` only — 32-bit ARM is gone.
+- The last **LTS** line with armv7l is therefore **22 (Jod)**, maintenance until **2027-04-30**.
+- unofficial-builds has **no** armv7l for 22/24/26 either (only `linux-arm64-musl` for 26) — no fallback.
+- hm2mqtt's `engines` (`^20.19 || ^22.12 || >=24`) already covers 22.
+- Official Node ≥ 18 linux binaries need **glibc ≥ 2.28**. OpenCCU (current buildroot) is fine; the
+  **CCU3 firmware is unverified** — RedMatic pinned 14.18.3 for that runtime, which proves nothing
+  either way. Must be checked on a real CCU3 before promising armv7l support (OQ-55).
+- Our runtime dependency tree (`binrpc`, `homematic-rega`, `homematic-xmlrpc`, `mqtt-interfaces-core`
+  → `mqtt`, `yargs`) is **pure JavaScript** — no node-gyp, no prebuilds, no QEMU, no
+  `prebuilt/<arch>` directory checked into git (RedMatic's sore point per its BUILD.md). One
+  `npm ci --omit=dev` on the CI runner is shipped to all three arches; only `bin/node` differs.
+
+### 15.3 Configuration and the web UI
+
+The addon owns `etc/hm2mqtt.env` with the same `HM2MQTT_*` variables the systemd installer writes
+(`lib/install.js`, core `createInstaller`) — one config shape across systemd, Docker and CCU, and no
+config file format to invent (D-7 stays intact). The rc.d script sources it and execs
+`bin/node lib/../index.js`.
+
+Web UI = **static SPA + tcl CGIs**, no HTTP server of our own and no lighttpd proxy rule (unlike
+RedMatic, which proxies Node-RED on 1880). The CCU's lighttpd serves
+`/usr/local/etc/config/addons/www/hm2mqtt/` at `/addons/hm2mqtt/`; `#!/bin/tclsh` CGIs there do the
+work, each validating the ReGa session (`load tclrega.so`,
+`rega_script "Write(system.GetSessionVarStr('$sid'))"` — RedMatic's `lib/session.tcl`, 12 lines):
+
+| CGI                | Job                                                                                                                                                                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings.cgi`     | session gate, then cats the static `index.html` (RedMatic's pattern)                                                                                                                                                                                                                            |
+| `getconfig.cgi`    | current `etc/hm2mqtt.env` as JSON                                                                                                                                                                                                                                                               |
+| `setconfig.cgi`    | writes it back from stdin                                                                                                                                                                                                                                                                       |
+| `service.cgi`      | `?cmd=start\|stop\|restart` → rc.d (session-checked); `?cmd=status` → pid/rss/cpu/uptime                                                                                                                                                                                                        |
+| `log.cgi`          | tail of `logread \| grep hm2mqtt`                                                                                                                                                                                                                                                               |
+| `update_check.cgi` | GitHub latest release (15.1)                                                                                                                                                                                                                                                                    |
+| `api.cgi`          | the few actions that need real logic — `discover`, `probe` (interface ports), `mqtt-test`, `preview` (item template against live channels), `channels` — each a one-shot `bin/node addon/api.js <cmd>` reusing `lib/discovery.js`, `lib/interfaces.js`, `lib/topics.js`; no long-running server |
+
+Svelte for the SPA: it compiles to a ~30 kB bundle with no runtime, which is what a 32-bit CCU3
+deserves — RedMatic shipped jQuery + Bootstrap + FontAwesome `node_modules` raw. Build it as a
+dev-dependency (`npm run build:webui` → `addon/www/`), commit nothing generated.
+
+**Every hm2mqtt option is configurable in the UI, comfortably — nobody ever edits a config file**
+(user decision 2026-08-31). `config.js` OPTIONS stays the single source of truth: type, `describe`,
+`default`, `choices`, `secret`, `demandOption` and `discover` are emitted as JSON at build time and
+the SPA renders a widget per option. Generated, but not a dump of `--help`: each option additionally
+carries a small UI descriptor (group, widget, label de/en, order) so the page reads like a product:
+
+| Gruppe             | Options                                                                           | Widgets beyond a plain input                                                                                                                                                                                                                                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Verbindung zur CCU | `ccu-address`, `local`, `interfaces`, `ccu-username/password`, `ccu-tls/insecure` | on the CCU the address is pinned to `127.0.0.1` and the group collapses to "lokal" behind an advanced toggle (H-37); `--discover` becomes a "CCU suchen" button that fills the field (for remote installs); interfaces = checkbox list with an "automatisch ermitteln" action that runs the port probe and ticks what answered |
+| MQTT               | `mqtt-url`, credentials, client id, `payload`, retain/QoS                         | "Verbindung testen" button — connect, publish and read back on a scratch topic, report the result inline                                                                                                                                                                                                                       |
+| Namen & Topics     | item templates, `rega`, `rega-names-interval`, name file                          | live preview: the template is rendered against real channels fetched through the CGI, so `${channelName\|channel}/${datapoint}` shows `Wohnzimmer Licht/STATE` while typing (OQ-54's templates are unusable blind)                                                                                                             |
+| Home Assistant     | `ha-discovery` and friends                                                        | one switch plus an estimate of the entities that will be announced (§13, H-22)                                                                                                                                                                                                                                                 |
+| Filter             | `--ignore` globs (B-4)                                                            | list editor, one glob per row, with a live match count against the CCU's channel list                                                                                                                                                                                                                                          |
+| Erweitert          | ports, ping timeout, listen/init address, log level                               | collapsed; defaults as placeholders, per-field reset                                                                                                                                                                                                                                                                           |
+
+What makes it comfortable rather than merely complete: client-side validation from the option type
+before saving (a bad port or URL never reaches the env file); `secret: true` fields masked, never
+sent back to the browser, written only when changed; `describe` as help text and the default as
+placeholder on every field; unsaved-vs-running state visible, with one "Speichern & Neustart"
+button doing both; the log tail on the same page so a wrong setting shows up immediately; and
+options that are meaningless on the CCU (`--install`/`--uninstall`, `--listen-address` in local mode)
+hidden instead of shown broken. First start opens the same page with only the MQTT group required —
+address, interfaces and names come from the local CCU by themselves.
+
+### Decisions
+
+| ID   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H-28 | **The addon bundles its own Node.js**, downloaded from nodejs.org at build time (RedMatic's `build_addon.sh` approach) — never a dependency on `ccu-addon-nodejs` (dead since 2018) or on whatever OpenCCU happens to ship. Version pinned in one place: `package.json` `addon.node` (RedMatic used `engines.node` for this; we cannot, ours is a range).                                                                                                                              |
+| H-29 | **Node 22.x for all three arches** while CCU3/armv7l is supported (last LTS with an official armv7l build; EOL 2027-04-30). When CCU3 support ends, arm64/x64 move to the current LTS. No mixed pins per arch — one runtime, one test matrix.                                                                                                                                                                                                                                          |
+| H-30 | **Strip the runtime**: keep `bin/node` only — drop `include/`, `share/`, `lib/node_modules/npm`, corepack, `CHANGELOG.md`/`README.md` (licence goes to `www/licenses.html`). ~110 MB unpacked → ~50 MB. No npm on the device: dependencies are installed on the CI runner and shipped inside the package (there are no build tools on a CCU anyway).                                                                                                                                   |
+| H-31 | **Pure-JS dependency tree is a hard constraint** for the addon. A native module in hm2mqtt or its libs would mean per-arch prebuilds via QEMU — if one ever becomes necessary, it must be optional and the addon builds without it.                                                                                                                                                                                                                                                    |
+| H-32 | **Backup**: `.nobackup` markers in the big directories (`bin/`, `node_modules/`) — honoured by OpenCCU out of the box. On CCU3 they are inert and the backup grows by ~50 MB; we accept that and **do not patch `cp_security.cgi`** (RedMatic does; patching a read-only rootfs to shrink a backup is not worth the failure modes).                                                                                                                                                    |
+| H-33 | **UI = static Svelte SPA + tcl CGIs, session-checked against ReGa.** No node process for the UI, no lighttpd proxy rule, no port. The config form is generated from `config.js` OPTIONS plus a per-option UI descriptor (group, widget, label); `secret: true` fields render masked and are only written when changed. German and English (the `.cfg` carries both anyway).                                                                                                            |
+| H-34 | **Config lives in `etc/hm2mqtt.env`** — the same `HM2MQTT_*` variables as the systemd unit and the Docker image. The UI owns that file; SSH editing stays possible for power users but is never necessary (H-38). No settings.json, no second schema.                                                                                                                                                                                                                                  |
+| H-35 | **`monit` integration on OpenCCU** (`/usr/local/etc/monit-hm2mqtt.cfg`, `MODE PASSIVE`, `ONREBOOT NOSTART`, start/stop/restart via rc.d, alert on memory/cpu) so a crashed bridge is restarted the way RedMatic's is. Absent monit (CCU3) the rc.d script is all there is.                                                                                                                                                                                                             |
+| H-36 | **A separate repo is not created** — the addon lives in this repo under `addon/` and is built by this repo's release workflow, so version, changelog and code stay in one place (RedMatic's split of RedMatic/ccu-addon-* was a maintenance tax).                                                                                                                                                                                                                                      |
+| H-37 | **Local transport is the default when hm2mqtt runs on the CCU** (§15.4): binrpc on 32001/32000 for BidCos-RF/Wired, XML-RPC straight to hmipserver on 32010, VirtualDevices 39292, ReGa on 8183 — auto-detected (`127.*`/`localhost` + the `32001` marker in `/etc/lighttpd/conf.d/proxy.conf`), overridable with `--local`/`--no-local`. Same behaviour as node-red-contrib-ccu, i.e. the flow this replaces. Useful outside the addon too (Docker on the CCU with host networking).  |
+| H-38 | **The UI covers 100 % of the options, and a test enforces it**: every key of `config.js` OPTIONS must appear either in the UI descriptor table or on an explicit "not applicable on the CCU" list — a new CLI option cannot ship without its widget. Every value is reachable through a control that fits it (checkbox list, list editor, preview, test button), never a raw text field holding a comma-separated string, and the addon never asks the user to open a file or a shell. |
+
+### 15.4 Local transport on the CCU — binrpc for BidCos, hmipserver direct
+
+Running on the CCU means the interface processes sit on loopback and can be talked to directly.
+The familiar ports 2000/2001/2010/9292/8181 are lighttpd proxies; using them locally buys an extra
+hop, XML over HTTP and CCU authentication for nothing. node-red-contrib-ccu (and therefore the
+current flow under RedMatic) switches to a local port map whenever the host is local, and the addon
+does the same **by default** (user decision 2026-08-31). The map, from
+`node-red-contrib-ccu/nodes/ccu-connection.js:342-525`:
+
+| Interface             | remote (today)                | local (CCU ≥ 3.41)                                        |
+| --------------------- | ----------------------------- | --------------------------------------------------------- |
+| BidCos-RF (rfd)       | xmlrpc 2001 / 42001 TLS       | **binrpc 32001**                                          |
+| BidCos-Wired (hs485d) | xmlrpc 2000 / 42000 TLS       | **binrpc 32000**                                          |
+| HmIP-RF (hmipserver)  | xmlrpc 2010 / 42010 TLS       | **xmlrpc 32010** (direct, not through the lighttpd proxy) |
+| VirtualDevices        | xmlrpc 9292 `/groups` / 49292 | **xmlrpc 39292** `/groups`                                |
+| ReGa (script)         | http 8181 / 48181 TLS         | **http 8183** (ReGaHSS' own port, no auth)                |
+| ReGaHSS rpc           | 1999                          | binrpc 31999 (we do not use it)                           |
+| CUxD                  | binrpc 8701                   | binrpc 8701 (unchanged)                                   |
+
+HmIP stays **XML-RPC** — hmipserver speaks no binrpc; "direct" means port 32010 instead of the proxy.
+BidCos switches protocol _and_ port, which is what `--bidcos-binrpc` (H-7) already does remotely,
+so the plumbing exists: `interfaceConfig()` in `lib/interfaces.js` grows a `local` flag next to
+`tls`/`bidcosBinrpc`, and `lib/rega.js` gets port 8183.
+
+Detection, as in the reference: host starts with `127.` or is `localhost` **and**
+`/etc/lighttpd/conf.d/proxy.conf` contains `"port" => 32001` — the marker for firmware ≥ 3.41, which
+introduced the 3xxxx ports; older firmware silently keeps the proxy ports. An explicit
+`--local`/`--no-local` overrides the probe (Docker on the CCU with host networking is local too,
+but a container with its own netns is not).
+
+Consequences, all good ones: no `--ccu-username`/`--ccu-password` needed (the direct ports have no
+authentication), `--ccu-tls` is meaningless and ignored in local mode, and the callback servers bind
+loopback (`--listen-address 127.0.0.1`, init URL `127.0.0.1:2126/2127`) so the addon exposes nothing
+on the LAN. It also sidesteps the CCU firewall entirely — the single most common support question
+for the remote setup.
+
+### 15.5 Build and CI
+
+`addon/build.sh <arch>` mirrors `build_addon.sh`, minus the prebuilt-binary machinery:
+
+1. `NODE=$(jq -r .addon.node package.json)`; arch → tarball name (`linux-armv7l`, `linux-arm64`, `linux-x64`).
+2. `curl https://nodejs.org/dist/v$NODE/$NAME.tar.xz | tar -xJ` into `addon_tmp/hm2mqtt/`, strip per H-30.
+3. Overlay `addon/files/` (rc.d script, cgis, etc, www build output, `.nobackup` markers).
+4. `npm ci --omit=dev` of hm2mqtt itself into `hm2mqtt/lib/node_modules/hm2mqtt` (or `npm pack` + extract — reuse what `deploy.sh` already does).
+5. Write `hm2mqtt/versions` (`VERSION_ADDON`, `NODE_VERSION`) for the rc.d `info` output.
+6. `tar --owner=root --group=root -czf dist/hm2mqtt-ccu-<arch>-<version>.tar.gz *` plus `.sha256`.
+
+CI: a third job **`addon`** in `.github/workflows/release.yml` next to `npm` and `docker`, matrix
+`[armv7l, aarch64, x86_64]`, needs the test job, uploads the tarballs to the GitHub release
+(`softprops/action-gh-release`, the release the tag already creates). Plus a build-only step in
+`ci.yml` on PRs so a broken `update_script`/`build.sh` is caught before a tag exists. The whole thing
+runs on `ubuntu-latest` with no QEMU, because of H-31 — a full matrix is ~2 minutes.
+
+### 15.6 Steps
+
+| #   | Step                                                                                                                                                                                                                                                               | Effort |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| 1   | Verify glibc/Node 22 on a real CCU3 and on OpenCCU arm64 (OQ-55) — decides whether armv7l is in or out before anything else is built.                                                                                                                              | 1 h    |
+| 2   | `addon/files/` skeleton: rc.d script, `update_script`, `hm2mqtt.cfg`, `bin/update_addon`, `etc/default.env`, monit cfg, `.nobackup`.                                                                                                                               | 0.5 d  |
+| 3   | `addon/build.sh` + `dist/` output, local install test on the CCU3 and an OpenCCU VM (x86_64 is the fast test target).                                                                                                                                              | 0.5 d  |
+| 4   | CGIs (`settings`, `getconfig`, `setconfig`, `service`, `log`, `update_check`) with `lib/session.tcl` ported from RedMatic (MIT, same author).                                                                                                                      | 0.5 d  |
+| 5   | Svelte UI: OPTIONS-driven config form with the groups and widgets of §15.3 (discover button, interface probe, MQTT test, template preview, ignore-list editor), start/stop/restart + status + log tail, version/update banner, de/en; plus the H-38 coverage test. | 2–3 d  |
+| 6   | Release workflow job + README/wiki section ("Installation auf der CCU").                                                                                                                                                                                           | 0.5 d  |
+| 7   | **Local mode** (H-37): `local` flag in `interfaceConfig()`, ReGa 8183, auto-detection + `--local`, unit tests for the port map. Independent of the addon — do it first, it also makes a Docker-on-CCU install sane.                                                | 0.5 d  |
+
+### Open questions
+
+| ID    | Question                                                                                                                                                                                         | Proposal                                                                                                                                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-55 | Does an official Node 22 `linux-armv7l` binary run on the **CCU3 firmware** (glibc ≥ 2.28 required)? RedMatic's 14.18.3 pin suggests an old glibc, but was never re-tested.                      | Test `getconf GNU_LIBC_VERSION` and `./node -e 0` on the device. If it fails: OpenCCU only, CCU3 users stay on Docker/home server — building Node from the buildroot toolchain is not worth it.                     |
+| OQ-56 | Where does the broker come from on a CCU-only setup? hm2mqtt needs one, and `ccu-addon-mosquitto` (2019, Mosquitto 1.5.8) is ancient.                                                            | Document "install the Mosquitto addon or point at an external broker"; do not bundle a broker. Possibly refresh ccu-addon-mosquitto separately.                                                                     |
+| OQ-57 | Does OpenCCU have a third-party addon index/store to register with (RaspberryMatic had a community list; `raspberrymatic-addon-rmupdate` carries a `support.json`)?                              | Check the OpenCCU docs; if yes, add the metadata file in step 6.                                                                                                                                                    |
+| OQ-58 | HA discovery and the ReGa poll default on a CCU3: the process shares 1 GB RAM and a slow CPU with ReGa/rfd. Same defaults as the server build, or an addon profile (discovery off, longer poll)? | Ship the same defaults, but set them in `etc/default.env` so the addon profile can differ later without a code change; measure RSS on the CCU3 first (RedMatic alerted at 280 MB for Node-RED).                     |
+| OQ-59 | Does the addon replace `--install`/`--uninstall` on the CCU, or should `lib/install.js` grow a CCU mode?                                                                                         | Addon only. systemd does not exist on the CCU; the rc.d script is the unit.                                                                                                                                         |
+| OQ-60 | Firmware **< 3.41** (no 3xxxx ports) and OpenCCU: does the `proxy.conf` marker still exist and are the port numbers unchanged there? The detection is copied from a 2019 code base.              | Probe-based detection degrades to the proxy ports, so an old or changed firmware is merely slower, not broken; verify on the CCU3 and an OpenCCU image in step 1 and drop the marker check if OpenCCU has moved on. |
