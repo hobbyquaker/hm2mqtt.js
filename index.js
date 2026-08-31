@@ -137,6 +137,23 @@ const outValue = (value) => (payloadFormat === 'plain' ? plainValue(value) : val
 
 const ignored = compileIgnore(config.ignore);
 
+/*
+ * Topics are rendered from templates, whole. `${prefix}` is the instance name, so the defaults
+ * produce exactly the topics hm2mqtt has always used; anything else is the user's choice, and what
+ * is subscribed follows from the literal part of the set templates.
+ */
+const topicFields = {prefix: config.name};
+const renderStatus = compileTemplate(config.topicStatus);
+const renderSet = compileTemplate(config.topicSet);
+const renderSysvarStatus = compileTemplate(config.topicSysvarStatus);
+const renderSysvarSet = compileTemplate(config.topicSysvarSet);
+const renderProgramStatus = compileTemplate(config.topicProgramStatus);
+const renderProgramSet = compileTemplate(config.topicProgramSet);
+/** what the plain mirror tree calls an item: the status topic without the `<name>/status/` head */
+const plainItem = (topic) => {
+    const head = `${config.name}/status/`;
+    return topic.startsWith(head) ? topic.slice(head.length) : topic;
+};
 const adapter = createAdapter({
     pkg,
     config,
@@ -165,16 +182,19 @@ const adapter = createAdapter({
         rega: Boolean(regaSync),
         payload: payloadFormat,
     }),
-    // the set topics are configurable, so they are subscribed as absolute patterns rather than
-    // through the core's <name>/set/# convention; paramset and rpc stay where they were
+    /*
+     * Set topics are configurable, and the core owns `<name>/set/#`: it intercepts that namespace
+     * before the listen list and returns whether or not `onSet` is defined. So a template that
+     * stays under `<name>/set/` has to be served through onSet, and only one that moves elsewhere
+     * needs a listen pattern. onSet is handed the whole topic as its third argument, which is what
+     * the index is keyed by.
+     */
+    onSet: (parts, value, topic) => handleSetTopic(topic, value),
     listen: Object.fromEntries(
-        [
-            ...new Set(
-                [config.topicSet, config.topicSysvarSet, config.topicProgramSet].map((t) =>
-                    subscribePattern(t, topicFields),
-                ),
-            ),
-        ].map((pattern) => [pattern, handleSetTopic]),
+        [...new Set([config.topicSet, config.topicSysvarSet, config.topicProgramSet])]
+            .map((template) => subscribePattern(template, topicFields))
+            .filter((pattern) => !pattern.startsWith(`${config.name}/set/`))
+            .map((pattern) => [pattern, handleSetTopic]),
     ),
     subscriptions: {
         'paramset/#': handleParamset,
@@ -231,23 +251,6 @@ const values = new ValueStore({
 });
 values.load();
 
-/*
- * Topics are rendered from templates, whole. `${prefix}` is the instance name, so the defaults
- * produce exactly the topics hm2mqtt has always used; anything else is the user's choice, and what
- * is subscribed follows from the literal part of the set templates.
- */
-const topicFields = {prefix: config.name};
-const renderStatus = compileTemplate(config.topicStatus);
-const renderSet = compileTemplate(config.topicSet);
-const renderSysvarStatus = compileTemplate(config.topicSysvarStatus);
-const renderSysvarSet = compileTemplate(config.topicSysvarSet);
-const renderProgramStatus = compileTemplate(config.topicProgramStatus);
-const renderProgramSet = compileTemplate(config.topicProgramSet);
-/** what the plain mirror tree calls an item: the status topic without the `<name>/status/` head */
-const plainItem = (topic) => {
-    const head = `${config.name}/status/`;
-    return topic.startsWith(head) ? topic.slice(head.length) : topic;
-};
 /** full set topic -> what to write; rebuilt whenever names or devices change */
 const topicIndex = new ItemIndex();
 

@@ -60,7 +60,35 @@ function mosquittoBinary() {
             return p;
         }
     }
-    return 'mosquitto';
+    return null;
+}
+
+/**
+ * A broker on `port`. mosquitto when the machine has one - it is what the fleet runs against - and
+ * otherwise aedes in this process, so the end-to-end test runs on a laptop without a broker
+ * installed. Not having it runnable where the code is written is how a broken set path reached a
+ * release.
+ * @param {number} port
+ * @returns {Promise<{close: () => Promise<void>, kind: string}>}
+ */
+async function startBroker(port) {
+    const binary = mosquittoBinary();
+    if (binary) {
+        const child = spawn(binary, ['-p', String(port)], {stdio: 'ignore'});
+        await waitPort(port);
+        return {kind: 'mosquitto', close: async () => child.kill()};
+    }
+    const {default: Aedes} = await import('aedes');
+    const aedes = new Aedes();
+    const server = net.createServer(aedes.handle);
+    await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+    return {
+        kind: 'aedes',
+        close: () =>
+            new Promise((resolve) => {
+                server.close(() => aedes.close(resolve));
+            }),
+    };
 }
 
 describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () => {
@@ -101,8 +129,7 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
 
     before(async () => {
         mqttPort = await freePort();
-        broker = spawn(mosquittoBinary(), ['-p', String(mqttPort)], {stdio: 'ignore'});
-        await waitPort(mqttPort);
+        broker = await startBroker(mqttPort);
 
         const HmSim = require('hm-simulator/sim.js');
         // the simulator's data set does not match its own paramset descriptions (device firmware
@@ -226,7 +253,7 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
             sim.close();
         }
         if (broker) {
-            broker.kill();
+            await broker.close();
         }
     });
 
