@@ -3,3 +3,5 @@ node_modules
 *.tgz
 addon/work/
 dist/
+addon/ui/node_modules/
+addon/ui/dist/

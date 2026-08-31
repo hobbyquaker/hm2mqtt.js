@@ -72,17 +72,26 @@ rm -f "$WORK/$TGZ"
 npm install --silent --omit=dev --omit=optional --ignore-scripts --no-package-lock \
     --prefix "$TREE/app" >/dev/null
 
-# 4. the option schema the configuration UI renders (H-38: every option, no hand-maintained list)
+# 4. the option schema the configuration UI renders (H-38: every option, no hand-maintained list).
+# Redirected to a file on purpose: --config-schema truncates on a pipe (core G-7).
 node index.js --config-schema > "$TREE/www/config-schema.json"
 
-# 5. version file, read by the rc.d script and shown in Systemsteuerung
+# 5. the configuration UI itself - one self-contained index.html, replacing the placeholder
+echo "building the configuration UI..."
+if [ ! -d addon/ui/node_modules ]; then
+    (cd addon/ui && npm ci --silent --no-audit --no-fund)
+fi
+(cd addon/ui && npm run build --silent >/dev/null)
+cp addon/ui/dist/index.html "$TREE/www/index.html"
+
+# 6. version file, read by the rc.d script and shown in Systemsteuerung
 {
     echo "VERSION_ADDON=$VERSION"
     cat "$TREE/versions"
 } > "$TREE/versions.new"
 mv "$TREE/versions.new" "$TREE/versions"
 
-# 6. keep the bulky, reproducible parts out of the CCU backup (honoured by OpenCCU)
+# 7. keep the bulky, reproducible parts out of the CCU backup (honoured by OpenCCU)
 for dir in bin lib share app; do
     [ -d "$TREE/$dir" ] && touch "$TREE/$dir/.nobackup"
 done

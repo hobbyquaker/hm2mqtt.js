@@ -4,7 +4,7 @@ import globals from 'globals';
 
 export default [
     {
-        ignores: ['node_modules/**'],
+        ignores: ['node_modules/**', 'addon/ui/node_modules/**', 'addon/ui/dist/**', 'addon/work/**', 'dist/**'],
     },
     js.configs.recommended,
     prettier,
@@ -19,6 +19,15 @@ export default [
         },
         rules: {
             'no-unused-vars': ['error', {argsIgnorePattern: '^_'}],
+        },
+    },
+    {
+        // the addon's configuration UI runs in a browser, not in node
+        files: ['addon/ui/src/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.browser,
+            },
         },
     },
 ];

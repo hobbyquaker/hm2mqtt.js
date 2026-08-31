@@ -3,7 +3,7 @@
 # The page behind the hm2mqtt button in Systemsteuerung. Checks the session, then serves the
 # configuration UI.
 
-source /usr/local/addons/hm2mqtt/www/lib/session.tcl
+source [file join [file dirname [file normalize [info script]]] lib common.tcl]
 
 set params [query_params]
 set sid ""
@@ -14,7 +14,7 @@ if {[dict exists $params sid]} {
 puts "Content-Type: text/html; charset=utf-8\r\n"
 
 if {[check_session $sid]} {
-    set fd [open /usr/local/addons/hm2mqtt/www/index.html r]
+    set fd [open $ADDON_DIR/www/index.html r]
     puts -nonewline [read $fd]
     close $fd
 } else {

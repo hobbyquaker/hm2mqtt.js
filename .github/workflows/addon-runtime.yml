@@ -31,7 +31,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: sudo apt-get update && sudo apt-get install -y patchelf
+      - run: sudo apt-get update && sudo apt-get install -y patchelf tcl
+      - name: Test the CGIs
+        run: addon/test/cgi-test.sh
       - name: Build addon package
         run: addon/build.sh ${{ matrix.arch }} --beta
         env:
