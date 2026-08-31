@@ -52,12 +52,14 @@ For a setup without a server: hm2mqtt also ships as a CCU addon, installed in th
 _Systemsteuerung → Zusatzsoftware_. Pick the package for your hardware from the
 [latest release](https://github.com/hobbyquaker/hm2mqtt.js/releases/latest):
 
-| Platform                                         | Package                                |
-| ------------------------------------------------ | -------------------------------------- |
-| CCU3 with the official eQ-3 firmware             | `hm2mqtt-ccu-armv7l-<version>.tar.gz`  |
-| OpenCCU 32-bit (CCU3 hardware, Raspberry Pi 2/3) | `hm2mqtt-ccu-armv7l-<version>.tar.gz`  |
-| OpenCCU 64-bit (Raspberry Pi 4/5)                | `hm2mqtt-ccu-aarch64-<version>.tar.gz` |
-| OpenCCU on x86_64 (debmatic, virtual machines)   | `hm2mqtt-ccu-x86_64-<version>.tar.gz`  |
+| Platform                                                         | Package                                |
+| ---------------------------------------------------------------- | -------------------------------------- |
+| CCU3 with the official eQ-3 firmware, ELV-Charly, OpenCCU 32-bit | `hm2mqtt-ccu-armv7l-<version>.tar.gz`  |
+| OpenCCU 64-bit (Raspberry Pi 4/5)                                | `hm2mqtt-ccu-aarch64-<version>.tar.gz` |
+| OpenCCU on x86_64 (debmatic, virtual machines)                   | `hm2mqtt-ccu-x86_64-<version>.tar.gz`  |
+
+The architecture decides, not the firmware — `uname -m` on the CCU says which one it is. A CCU3 with
+the original eQ-3 firmware is always `armv7l`. Each package has a `.sha256` next to it.
 
 After the install a **hm2mqtt** button appears in _Systemsteuerung_: it configures every option of
 this README in a form, starts and stops the service and shows the log. The only setting that has to

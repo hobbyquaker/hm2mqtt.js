@@ -113,76 +113,44 @@ function changelogSection(version) {
 }
 
 /**
- * The "which file do I need" table (H-42). npm and the Docker image always exist; the addon
- * packages are listed only for the architectures this release actually carries, so the notes can
- * never point at a file that was not built. `dist/` is where the release job collects them.
+ * A short pointer to the artefacts (H-42). Only the addon packages need a table - which file goes
+ * on which box is not obvious - and only for the architectures this release actually carries.
+ * Everything else (install, options, configuration) is the README's job.
  * @param {string} version
  * @returns {string}
  */
 function installationSection(version) {
     const assets = fs.existsSync('dist') ? fs.readdirSync('dist').filter((name) => name.endsWith('.tar.gz')) : [];
     const image = 'ghcr.io/' + (process.env.GITHUB_REPOSITORY || 'hobbyquaker/hm2mqtt.js').toLowerCase();
-
-    const rows = [
-        ['Any host with Node ≥ 20.19 (server, Raspberry Pi, NAS)', `\`npm install -g hm2mqtt@${version}\``],
-        ['Docker — amd64, arm64, armv7', `\`${image}:${version}\``],
-    ];
-
-    // architecture -> the platforms that need that package
     const platforms = [
-        ['armv7l', 'CCU3 with the official eQ-3 firmware — *Systemsteuerung → Zusatzsoftware*'],
-        ['armv7l', 'OpenCCU 32-bit (CCU3 hardware, Raspberry Pi 2/3)'],
+        ['armv7l', 'CCU3, ELV-Charly, OpenCCU 32-bit'],
         ['aarch64', 'OpenCCU 64-bit (Raspberry Pi 4/5)'],
-        ['x86_64', 'OpenCCU on x86_64 (debmatic, virtual machines)'],
+        ['x86_64', 'OpenCCU x86_64 (debmatic, VM)'],
     ];
+
+    const lines = ['## Installation', ''];
+    const rows = [];
     let beta = false;
     for (const [arch, platform] of platforms) {
         const asset = assets.find((name) => name.includes(`-ccu-${arch}-`));
         if (!asset) continue;
         if (asset.includes('-beta')) beta = true;
-        rows.push([platform, `[\`${asset}\`](${repoUrl}/releases/download/${tag}/${asset})`]);
+        rows.push(`| ${platform} | [\`${asset}\`](${repoUrl}/releases/download/${tag}/${asset}) |`);
     }
-
-    const lines = ['## Installation', '', '| Platform | Install |', '| --- | --- |'];
-    for (const [platform, install] of rows) {
-        lines.push(`| ${platform} | ${install} |`);
-    }
-    if (rows.length > 2) {
+    if (rows.length > 0) {
         lines.push(
+            'CCU addon' + (beta ? ' (**beta**)' : '') + ' — install in the WebUI under *Zusatzsoftware*:',
             '',
-            '### Which addon package?',
-            '',
-            'The architecture, not the firmware, decides — `ssh` into the CCU and run `uname -m`:',
-            '',
-            '| `uname -m` | Package |',
+            '| CCU | Package |',
             '| --- | --- |',
-            '| `armv7l` (CCU3, ELV-Charly, Raspberry Pi 2/3) | `armv7l` |',
-            '| `aarch64` (OpenCCU 64-bit on Raspberry Pi 4/5) | `aarch64` |',
-            '| `x86_64` (debmatic, OpenCCU in a VM) | `x86_64` |',
+            ...rows,
             '',
-            'A CCU3 with the original eQ-3 firmware is always `armv7l`. The package is installed in the WebUI ' +
-                'under *Systemsteuerung → Zusatzsoftware → Zusatzsoftware installieren*, and afterwards a ' +
-                '**hm2mqtt** button appears in *Systemsteuerung* where everything is configured. Each package ' +
-                'has a `.sha256` next to it.',
-            '',
-            'What it does on the CCU: it brings its own Node.js and keeps everything inside ' +
-                "`/usr/local/addons/hm2mqtt`, so no other addon's Node.js is used or disturbed, and it talks to " +
-                'the interface processes directly (binrpc 32001/32000, hmipserver 32010, ReGa 8183) — no CCU ' +
-                'authentication, no firewall rules, nothing of hm2mqtt listening on the network. The one thing ' +
-                'you have to set is the broker URL: a CCU has no MQTT broker of its own, so point it at one on ' +
-                'your network or install the Mosquitto addon.',
         );
-        if (beta) {
-            lines.push(
-                '',
-                '> **The addon packages are beta.** They are built and tested in CI, and the bundled runtime ' +
-                    'and the whole test suite have been verified on a CCU3 (firmware 3.87.6, kernel 4.14) — but ' +
-                    'nobody has yet installed the package itself on real hardware. If you try it, a short report ' +
-                    'either way is very welcome; the beta marker comes off once one CCU3 and one OpenCCU install ' +
-                    'are confirmed.',
-            );
-        }
     }
+    lines.push(
+        `Server or NAS: \`npm install -g hm2mqtt@${version}\` · Docker: \`${image}:${version}\` · ` +
+            `everything else in the [README](${repoUrl}#readme).`,
+    );
     return lines.join('\n');
 }
 
