@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Addon: the service did not start** — `Error: ENOENT ... mkdir '/root/.hm2mqtt'`. hm2mqtt's state
+  directory falls back to `$HOME/.hm2mqtt`, and on a CCU that is `/root` on a read-only rootfs. The
+  addon now writes inside `/usr/local/addons/hm2mqtt` and nowhere else: `HM2MQTT_STATE_DIR` ships
+  preconfigured in the addon's config, and the service script pins it, `HOME` and the XDG
+  directories before starting - which also repairs installations whose config predates this.
+- The state directory and the two callback addresses are no longer offered in the addon UI: on the
+  CCU they are fixed (the interface processes call back over loopback), and an option a user can set
+  but the addon overrides is worse than no option.
+- Outside the addon too: a state directory that cannot be created now reports the path and what to
+  set instead of an ENOENT stack trace - a read-only container filesystem hits the same thing.
+
 ## 3.4.1
 
 ### Fixed

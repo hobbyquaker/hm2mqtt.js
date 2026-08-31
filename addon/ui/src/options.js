@@ -22,7 +22,15 @@ export const GROUPS = [
  * Options that exist in the CLI but not in this UI, with the reason. Kept explicit so the
  * coverage test can tell "deliberately hidden" from "forgotten".
  */
-export const NOT_APPLICABLE = {};
+export const NOT_APPLICABLE = {
+    // the service script pins this to the addon's own var/ directory: on a CCU everything else is
+    // either read-only or outside the addon, and an addon writing there is a bug
+    'state-dir': 'the addon writes inside /usr/local/addons/hm2mqtt only',
+    // running on the CCU, the interface processes call back over loopback and local mode already
+    // binds there - there is nothing for a user to decide
+    'listen-address': 'always loopback on the CCU',
+    'init-address': 'always loopback on the CCU',
+};
 
 export const OPTIONS = {
     // --- CCU ---------------------------------------------------------------------------------
@@ -109,14 +117,11 @@ export const OPTIONS = {
     'rpc-topics': {group: 'filter', de: 'RPC-Topics veröffentlichen', en: 'Publish RPC topics'},
 
     // --- advanced ----------------------------------------------------------------------------
-    'listen-address': {group: 'advanced', de: 'Adresse der Callback-Server', en: 'Address of the callback servers'},
-    'init-address': {group: 'advanced', de: 'Adresse, die die CCU zurückruft', en: 'Address the CCU calls back'},
     'xmlrpc-port': {group: 'advanced', de: 'XML-RPC-Port', en: 'XML-RPC port'},
     'binrpc-port': {group: 'advanced', de: 'BIN-RPC-Port', en: 'BIN-RPC port'},
     'ping-timeout': {group: 'advanced', de: 'Ping-Timeout (Sekunden)', en: 'Ping timeout (seconds)'},
     'duty-cycle-interval': {group: 'advanced', de: 'Duty-Cycle-Abfrage (Sekunden)', en: 'Duty cycle poll (seconds)'},
     'stats-interval': {group: 'advanced', de: 'Statistik-Intervall (Sekunden)', en: 'Statistics interval (seconds)'},
-    'state-dir': {group: 'advanced', de: 'Verzeichnis für den Zustand', en: 'State directory'},
     verbosity: {group: 'advanced', de: 'Log-Level', en: 'Log level'},
 };
 

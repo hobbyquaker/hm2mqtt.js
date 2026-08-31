@@ -158,6 +158,28 @@ case "$out" in
     *) fail "only allows its four commands" "$out" ;;
 esac
 
+echo "the addon writes only inside its own directory"
+rc=addon/files/hm2mqtt/rc.d/hm2mqtt
+case "$(cat $rc)" in
+    *'export HOME="$ADDON_DIR"'*) pass "HOME is pinned to the addon directory" ;;
+    *) fail "HOME is pinned to the addon directory" "rc.d does not export HOME" ;;
+esac
+case "$(cat $rc)" in
+    *'export HM2MQTT_STATE_DIR="$ADDON_DIR/var"'*) pass "the state directory is pinned to var/" ;;
+    *) fail "the state directory is pinned to var/" "rc.d does not export HM2MQTT_STATE_DIR" ;;
+esac
+case "$(cat addon/files/hm2mqtt/etc/default.env)" in
+    *'HM2MQTT_STATE_DIR=/usr/local/addons/hm2mqtt/var'*) pass "default.env ships the state directory" ;;
+    *) fail "default.env ships the state directory" "not set in default.env" ;;
+esac
+# a path outside the addon in the shipped files is how the /root/.hm2mqtt crash happened
+outside="$(grep -rnE '(^|[^a-zA-Z0-9_/])(/root|/home|/var/lib|~)/' addon/files/ | grep -v '^addon/files/hm2mqtt/www/index.html' || true)"
+if [ -z "$outside" ]; then
+    pass "no shipped file points outside /usr/local"
+else
+    fail "no shipped file points outside /usr/local" "$outside"
+fi
+
 echo
 if [ "$failed" = 0 ]; then
     echo "all CGI tests passed"

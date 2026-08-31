@@ -44,13 +44,23 @@ Start() {
     . $ENV_FILE
     set +a
 
+    # The addon writes inside its own directory and nowhere else. Enforced here rather than left
+    # to the config, because etc/hm2mqtt.env survives updates: an installation configured before
+    # this existed would otherwise keep the old behaviour. HOME goes with it - hm2mqtt's state
+    # directory falls back to $HOME/.hm2mqtt, and on a CCU that is /root on a read-only rootfs.
+    export HOME="$ADDON_DIR"
+    export HM2MQTT_STATE_DIR="$ADDON_DIR/var"
+    export XDG_CACHE_HOME="$ADDON_DIR/var/cache"
+    export XDG_CONFIG_HOME="$ADDON_DIR/etc"
+    export TMPDIR="${TMPDIR:-/tmp}"
+
     if [ -z "$HM2MQTT_MQTT_URL" ]; then
         logger -t $ADDON -p daemon.err "no MQTT broker configured - open Systemsteuerung -> hm2mqtt"
         echo "$ADDON has no broker configured"
         return 1
     fi
 
-    mkdir -p $ADDON_DIR/var
+    mkdir -p $ADDON_DIR/var $ADDON_DIR/var/cache
     if [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt $LOG_MAX ]; then
         mv $LOG $LOG.1
     fi

@@ -96,7 +96,15 @@ function firstIp() {
 
 // the option's default is $STATE_DIRECTORY only, so --install does not freeze this fallback into the env file
 config.stateDir = config.stateDir || path.join(os.homedir(), '.hm2mqtt');
-fs.mkdirSync(config.stateDir, {recursive: true});
+try {
+    fs.mkdirSync(config.stateDir, {recursive: true});
+} catch (error) {
+    // a home directory that does not exist or a read-only filesystem: say which path and what to
+    // set, instead of an ENOENT stack trace from deep in node:fs
+    console.error(`error: cannot create the state directory ${config.stateDir}: ${error.message}`);
+    console.error('set --state-dir (HM2MQTT_STATE_DIR) to a writable path');
+    process.exit(1);
+}
 
 let nameFile = {};
 if (config.nameFile) {
