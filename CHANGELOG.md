@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **hm2mqtt as a CCU addon**: an installable package for _Systemsteuerung → Zusatzsoftware_, for
+  running hm2mqtt on the CCU itself instead of on a server — CCU3 with the official eQ-3 firmware,
+  and OpenCCU on armv7l, aarch64 and x86_64. It brings its own Node.js and configures itself
+  through a web UI in the CCU's WebUI: every option of the CLI in a form (generated from
+  `--config-schema`, so it cannot fall behind), service control, log view, German and English.
+  Everything lives in `/usr/local/addons/hm2mqtt` and refers only to itself — no `/usr/local/bin`
+  symlinks, no PATH or profile changes, and another addon's Node.js is neither used nor disturbed.
+  Built by `addon/build.sh`, attached to every release, marked `-beta` until an install on real
+  hardware is confirmed.
+- **`--local`**: when hm2mqtt runs on the CCU, it talks to the interface processes directly instead
+  of through lighttpd — binrpc on 32001/32000 for BidCos-RF/Wired, hmipserver on 32010,
+  VirtualDevices on 39292, ReGa on 8183 — which skips a proxy hop, the CCU's authentication and its
+  firewall, and lets the callback servers bind loopback. The same behaviour node-red-contrib-ccu
+  has. Detected by probing those ports when the address is local; `--no-local` forces the proxy
+  ports. Nothing changes for the usual setup with a CCU somewhere on the network.
+
 ## 3.3.0
 
 ### Added
