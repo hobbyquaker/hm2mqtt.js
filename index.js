@@ -15,7 +15,7 @@ import {Rega} from 'homematic-rega';
 import config from './config.js';
 import pkg from './package.json' with {type: 'json'};
 import {handle as handleInstall} from './lib/install.js';
-import {parseInterfaces, probeInterfaces, interfaceConfig} from './lib/interfaces.js';
+import {parseInterfaces, probeInterfaces, interfaceConfig, detectLocal, regaPort} from './lib/interfaces.js';
 import {RpcServers, RpcConnection} from './lib/rpc.js';
 import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
@@ -154,6 +154,18 @@ const adapter = createAdapter({
 });
 const {log, pubStatus} = adapter;
 
+/*
+ * Running on the CCU itself, the interface processes are on loopback and the familiar
+ * 2000/2001/2010/9292/8181 are only lighttpd proxies in front of them: an extra hop, XML over HTTP
+ * for BidCos, and the CCU's authentication - all for nothing. --local/--no-local decides; by
+ * default we probe, because node-red-contrib-ccu's config-file check stopped working on current
+ * firmware (see lib/interfaces.js).
+ */
+const localMode = config.local === undefined ? await detectLocal(host) : Boolean(config.local);
+if (localMode) {
+    log.info('local mode: BidCos over binrpc (32001/32000), hmipserver on 32010, ReGa on 8183');
+}
+
 const metadata = new Metadata({stateDir: config.stateDir, seedFile: path.join(here, 'paramsets.json'), log});
 metadata.load();
 
@@ -161,7 +173,8 @@ let regaSync = null;
 if (config.rega) {
     const rega = new Rega({
         host: ccuIp,
-        tls: config.ccuTls,
+        port: regaPort({tls: config.ccuTls, local: localMode}),
+        tls: config.ccuTls && !localMode,
         insecure: config.ccuInsecure,
         username: config.ccuUsername,
         password: config.ccuPassword,
@@ -615,14 +628,14 @@ function onEvent(iface, event) {
 }
 
 function createConnection(iface) {
-    const ic = interfaceConfig(iface, {tls: config.ccuTls, bidcosBinrpc: config.bidcosBinrpc});
+    const ic = interfaceConfig(iface, {tls: config.ccuTls, bidcosBinrpc: config.bidcosBinrpc, local: localMode});
     const conn = new RpcConnection({
         name: iface,
         host: ccuIp,
         protocol: ic.protocol,
         port: ic.port,
         path: ic.path,
-        tls: config.ccuTls,
+        tls: config.ccuTls && !localMode,
         insecure: config.ccuInsecure,
         username: config.ccuUsername,
         password: config.ccuPassword,
@@ -763,12 +776,14 @@ async function start() {
         regaSync.rega.url = regaSync.rega.url.replace(host, ccuIp);
         regaSync.rega.webUrl = regaSync.rega.webUrl.replace(host, ccuIp);
     }
-    enabled = parseInterfaces(config.interfaces) || (await probeInterfaces(ccuIp, {tls: config.ccuTls}));
+    enabled =
+        parseInterfaces(config.interfaces) || (await probeInterfaces(ccuIp, {tls: config.ccuTls, local: localMode}));
     if (enabled.length === 0) {
         log.error('no interface found on', host, '- check --ccu-address / --interfaces');
     }
     log.info('interfaces:', enabled.join(', ') || '(none)');
-    const listenAddress = config.listenAddress || firstIp();
+    // locally the CCU calls back over loopback, so nothing of ours needs to listen on the LAN
+    const listenAddress = config.listenAddress || (localMode ? '127.0.0.1' : firstIp());
     servers = new RpcServers({
         listenAddress,
         initAddress: config.initAddress,

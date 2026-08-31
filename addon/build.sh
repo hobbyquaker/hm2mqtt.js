@@ -86,7 +86,7 @@ cp addon/ui/dist/index.html "$TREE/www/index.html"
 
 # 6. version file, read by the rc.d script and shown in Systemsteuerung
 {
-    echo "VERSION_ADDON=$VERSION"
+    echo "VERSION_ADDON=\"$VERSION\""
     cat "$TREE/versions"
 } > "$TREE/versions.new"
 mv "$TREE/versions.new" "$TREE/versions"

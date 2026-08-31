@@ -74,6 +74,12 @@
             />
             <span>{value === 'true' || (value === '' && schema.default === true) ? t('an', 'on') : t('aus', 'off')}</span>
         </label>
+    {:else if widget === 'tristate'}
+        <select id={name} bind:value>
+            <option value="">{t('automatisch erkennen', 'detect automatically')}</option>
+            <option value="true">{t('ja', 'yes')}</option>
+            <option value="false">{t('nein', 'no')}</option>
+        </select>
     {:else if widget === 'select'}
         <select id={name} bind:value>
             <option value="">{t('Standard', 'default')} ({placeholder})</option>

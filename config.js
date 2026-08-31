@@ -22,6 +22,11 @@ export const OPTIONS = {
         describe: `comma separated interfaces (${INTERFACE_NAMES.join(', ')}) or "auto" (probe the ports)`,
         default: DEFAULT_INTERFACES.join(','),
     },
+    local: {
+        type: 'boolean',
+        describe:
+            'talk to the CCU processes directly (binrpc 32001/32000, hmipserver 32010, ReGa 8183) - default: probe when the address is local',
+    },
     'bidcos-binrpc': {
         type: 'boolean',
         describe: 'talk binrpc instead of xmlrpc to BidCos-RF and BidCos-Wired',

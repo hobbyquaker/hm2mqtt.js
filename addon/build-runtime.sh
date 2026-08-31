@@ -25,8 +25,7 @@
 # test suite passes there - 69 tests in 11 s. Note that child processes only work once the ELF
 # interpreter has been patched, since node re-executes itself through process.execPath.
 #
-# Requires: curl, tar, and for armv7l docker (to let apk resolve the foreign-arch packages) and
-# patchelf. Runs on Linux; on macOS use the workflow.
+# Requires: curl, tar, node and - for armv7l - patchelf. No container, no emulator.
 
 set -euo pipefail
 
@@ -35,7 +34,6 @@ cd "$(dirname "$0")/.."
 NODE_MAJOR="${NODE_MAJOR:-24}"
 PREFIX="${PREFIX:-/usr/local/addons/hm2mqtt}"
 ALPINE_BRANCH="${ALPINE_BRANCH:-edge}"
-ALPINE_IMAGE="${ALPINE_IMAGE:-alpine:edge}"
 ALPINE_MIRROR="${ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
 
 ARCH="${1:-}"
@@ -64,18 +62,18 @@ mkdir -p "$OUT/bin"
 [ "$ARCH" = armv7l ] && mkdir -p "$OUT/lib"
 
 if [ "$ARCH" = armv7l ]; then
-    require curl tar docker patchelf
+    require curl tar patchelf node
 
-    APK_VERSION="$(
-        curl -fsSL --max-time 120 "$ALPINE_MIRROR/$ALPINE_BRANCH/main/armv7/APKINDEX.tar.gz" |
-            tar -xzO APKINDEX |
-            awk -v RS='' '/(^|\n)P:nodejs(\n|$)/ {for (i = 1; i <= NF; i++) if ($i ~ /^V:/) print substr($i, 3)}' |
-            head -1
-    )"
-    [ -n "$APK_VERSION" ] || {
-        echo "error: alpine/$ALPINE_BRANCH/armv7 has no nodejs package" >&2
+    # Resolve nodejs and everything it needs, then download and unpack it. No container and no apk
+    # binary: an .apk is a gzipped tar, and addon/alpine-packages.js does the dependency
+    # resolution from the index - fewer moving parts than a docker daemon plus whichever
+    # apk-tools version the image of the day ships.
+    PACKAGES="$(node addon/alpine-packages.js nodejs armv7 "$ALPINE_BRANCH" "$ALPINE_MIRROR")"
+    [ -n "$PACKAGES" ] || {
+        echo "error: could not resolve the nodejs package in alpine/$ALPINE_BRANCH/armv7" >&2
         exit 1
     }
+    APK_VERSION="$(echo "$PACKAGES" | sed -n 's|.*/nodejs-\(.*\)\.apk$|\1|p' | head -1)"
     NODE_VERSION="v${APK_VERSION%%-r*}"
     case "$NODE_VERSION" in
         "v$NODE_MAJOR."*) ;;
@@ -86,21 +84,27 @@ if [ "$ARCH" = armv7l ]; then
             ;;
     esac
     echo "alpine/$ALPINE_BRANCH/armv7: nodejs $APK_VERSION -> $NODE_VERSION"
+    echo "$PACKAGES" | sed 's|.*/||' | tr '\n' ' ' | sed 's/^/packages:    /;s/ $/\n/'
 
-    # apk resolves the dependency tree for the foreign architecture into a staging root; no armv7
-    # code is executed here, the container only unpacks packages.
     ROOT="$(dirname "$OUT")/root"
     rm -rf "$ROOT"
-    mkdir -p "$ROOT"
-    docker run --rm -v "$PWD/$ROOT:/out" "$ALPINE_IMAGE" sh -eu -c "
-        apk add --no-cache alpine-keys >/dev/null
-        mkdir -p /out/etc/apk/keys
-        cp /usr/share/apk/keys/armv7/* /out/etc/apk/keys/
-        apk --root /out --arch armv7 --initdb --no-cache \
-            --repository $ALPINE_MIRROR/$ALPINE_BRANCH/main \
-            add nodejs >/dev/null
-        chown -R $(id -u):$(id -g) /out
-    "
+    mkdir -p "$ROOT/.apk"
+    for url in $PACKAGES; do
+        name="$(basename "$url")"
+        curl -fsSL --max-time 300 -o "$ROOT/.apk/$name" "$url" || {
+            echo "error: could not download $url" >&2
+            exit 1
+        }
+        # an .apk is signature + control + data as concatenated gzip streams; tar reads them all,
+        # and the metadata entries it complains about are of no interest here
+        tar -xzf "$ROOT/.apk/$name" -C "$ROOT" 2>/dev/null || true
+    done
+    rm -rf "$ROOT/.apk"
+
+    [ -f "$ROOT/usr/bin/node" ] || {
+        echo "error: the nodejs package did not contain usr/bin/node" >&2
+        exit 1
+    }
 
     cp -a "$ROOT/usr/bin/node" "$OUT/bin/node"
 
@@ -194,13 +198,15 @@ fi
 # npm is deliberately absent: the addon ships its dependencies pre-installed (there are no build
 # tools on a CCU anyway), so the runtime is the node binary and nothing else.
 
+# every value quoted: this file is sourced by the rc.d script, and an unquoted "(" in the source
+# description is a syntax error in the CCU's shell
 {
-    echo "NODE_VERSION=$NODE_VERSION"
-    echo "NODE_ARCH=$ARCH"
-    echo "NODE_SOURCE=$RUNTIME_SOURCE"
-    echo "NODE_PREFIX=$PREFIX"
-    [ -n "${ICU_VERSION:-}" ] && echo "NODE_ICU_DATA=$PREFIX/share/icu/$ICU_VERSION"
-    echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "NODE_VERSION=\"$NODE_VERSION\""
+    echo "NODE_ARCH=\"$ARCH\""
+    echo "NODE_SOURCE=\"$RUNTIME_SOURCE\""
+    echo "NODE_PREFIX=\"$PREFIX\""
+    [ -n "${ICU_VERSION:-}" ] && echo "NODE_ICU_DATA=\"$PREFIX/share/icu/$ICU_VERSION\""
+    echo "BUILD_DATE=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
 } > "$OUT/versions"
 
 # Self-check: every library the binary asks for must be part of the tree, and nothing may point

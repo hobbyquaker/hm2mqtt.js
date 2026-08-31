@@ -31,6 +31,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # patchelf rewrites the armv7l runtime's ELF headers, tcl runs the CGI tests
       - run: sudo apt-get update && sudo apt-get install -y patchelf tcl
       - name: Test the CGIs
         run: addon/test/cgi-test.sh

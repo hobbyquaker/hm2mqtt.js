@@ -28,6 +28,12 @@ export const OPTIONS = {
     // --- CCU ---------------------------------------------------------------------------------
     'ccu-address': {group: 'ccu', widget: 'ccu-address', de: 'CCU-Adresse', en: 'CCU address'},
     interfaces: {group: 'ccu', widget: 'interfaces', de: 'Schnittstellen', en: 'Interfaces'},
+    local: {
+        group: 'ccu',
+        widget: 'tristate',
+        de: 'Direkt mit den CCU-Prozessen sprechen',
+        en: 'Talk to the CCU processes directly',
+    },
     'ccu-username': {
         group: 'ccu',
         de: 'Benutzer (nur bei aktivierter Anmeldung)',
