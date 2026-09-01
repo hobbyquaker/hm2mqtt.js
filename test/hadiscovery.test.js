@@ -96,6 +96,11 @@ describe('discoveryModel', () => {
                     }
                     if (typeof v === 'string' && /^(hm\/status|hm\/set)/.test(v)) {
                         assert.ok(!v.includes('undefined'), `${b.id} ${key} ${f}: ${v}`);
+                        // the templates render the whole topic; entity() must not prefix it again
+                        assert.doesNotMatch(v, /^hm\/(status|set)\/hm\//, `${b.id} ${key} ${f}: doubled prefix ${v}`);
+                    }
+                    if (typeof v === 'string' && f.endsWith('cmd_t')) {
+                        assert.match(v, /^hm\/set\//, `${b.id} ${key} ${f}: not a set topic: ${v}`);
                     }
                 }
             }
@@ -122,7 +127,8 @@ describe('discoveryModel', () => {
         const sw = b.components['1_STATE'];
         assert.equal(sw.p, 'switch');
         assert.equal(sw.pl_on, 'true');
-        assert.match(sw.cmd_t, /^hm\/set\/.*:1\/STATE$/);
+        assert.match(sw.stat_t, /^hm\/status\/[^/]*:1\/STATE$/);
+        assert.equal(sw.cmd_t, sw.stat_t.replace(/^hm\/status\//, 'hm/set/'));
         assert.equal(sw.en, undefined);
         const power = b.components['2_POWER'];
         assert.equal(power.p, 'sensor');
