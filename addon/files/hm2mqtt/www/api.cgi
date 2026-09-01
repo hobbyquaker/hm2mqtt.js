@@ -14,7 +14,7 @@ if {[info exists params(cmd)]} {
     set cmd $params(cmd)
 }
 
-if {[lsearch -exact {discover probe mqtt-test channels preview} $cmd] < 0} {
+if {[lsearch -exact {discover probe mqtt-test preview} $cmd] < 0} {
     puts "{\"error\":\"unknown command\"}"
     exit 1
 }
@@ -26,17 +26,7 @@ foreach key {host url username password template prefix limit tls port timeout l
     }
 }
 
-set env(ICU_DATA) ""
-if {[file exists $ADDON_DIR/versions]} {
-    set fd [open $ADDON_DIR/versions r]
-    set content [read $fd]
-    close $fd
-    foreach line [split $content "\n"] {
-        if {[regexp {^NODE_ICU_DATA="?([^"]*)"?$} [string trim $line] dummy value]} {
-            set env(ICU_DATA) $value
-        }
-    }
-}
+node_env
 
 # no {*} on tcl 8.2 (the CCU3 ships 8.2.3): build the command and eval it
 if {[catch {eval exec [linsert $arguments 0 $ADDON_DIR/bin/node]} output]} {

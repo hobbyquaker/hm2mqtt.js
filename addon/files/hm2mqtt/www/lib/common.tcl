@@ -34,6 +34,87 @@ proc json_header {} {
     puts "Content-Type: application/json; charset=utf-8\r\n"
 }
 
+# The env file is sourced by the shell (rc.d), so values with shell characters are stored
+# single-quoted. These two are the write and read side of exactly that quoting.
+proc env_quote {value} {
+    if {[regexp {^[A-Za-z0-9_./:@%+,=-]*$} $value]} {
+        return $value
+    }
+    return "'[join [split $value {'}] {'\''}]'"
+}
+
+proc env_unquote {value} {
+    if {![string equal [string index $value 0] "'"] || ![string equal [string index $value end] "'"]} {
+        return $value
+    }
+    set inner [string range $value 1 end-1]
+    set out ""
+    set i 0
+    set n [string length $inner]
+    while {$i < $n} {
+        if {[string equal [string range $inner $i [expr {$i + 3}]] {'\''}]} {
+            append out "'"
+            incr i 4
+        } else {
+            append out [string index $inner $i]
+            incr i
+        }
+    }
+    return $out
+}
+
+# The env file as a name/value list, quoting undone: `array set config [read_env_file $ENV_FILE]`.
+proc read_env_file {path} {
+    set result [list]
+    if {![file exists $path]} {
+        return $result
+    }
+    set fd [open $path r]
+    set content [read $fd]
+    close $fd
+    foreach line [split $content "\n"] {
+        set line [string trim $line]
+        if {[string equal $line ""] || [string equal [string index $line 0] "#"]} {
+            continue
+        }
+        if {[regexp {^([A-Za-z_][A-Za-z0-9_]*)=(.*)$} $line dummy key value]} {
+            lappend result $key [env_unquote $value]
+        }
+    }
+    return $result
+}
+
+# The versions file (VERSION_ADDON, NODE_VERSION, NODE_ICU_DATA, ...) as a name/value list -
+# the one parser for the file that build.sh writes and the rc.d script sources.
+proc read_versions {} {
+    global ADDON_DIR
+    set result [list]
+    if {![file exists $ADDON_DIR/versions]} {
+        return $result
+    }
+    set fd [open $ADDON_DIR/versions r]
+    set content [read $fd]
+    close $fd
+    foreach line [split $content "\n"] {
+        if {[regexp {^([A-Z_][A-Z0-9_]*)="?([^"]*)"?$} [string trim $line] dummy key value]} {
+            lappend result $key $value
+        }
+    }
+    return $result
+}
+
+# ICU keeps its data outside the bundled node's libraries (musl build); without ICU_DATA in the
+# environment the node in bin/ does not start. Call before any exec of it.
+proc node_env {} {
+    global env
+    set env(ICU_DATA) ""
+    foreach {key value} [read_versions] {
+        if {[string equal $key "NODE_ICU_DATA"]} {
+            set env(ICU_DATA) $value
+        }
+    }
+}
+
 # Answers with a JSON error and exits unless the request carries a valid WebUI session. Returns the
 # query parameters as a name/value list.
 proc require_session {} {

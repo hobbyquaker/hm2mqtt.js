@@ -28,6 +28,7 @@ set check {
     }
     console.log(Object.keys(data).length);
 }
+node_env
 if {[catch {exec $ADDON_DIR/bin/node -e $check $temporary} result]} {
     file delete $temporary
     regsub {^.*Error: } $result "" message

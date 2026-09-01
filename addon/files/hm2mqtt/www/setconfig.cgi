@@ -12,17 +12,7 @@ json_header
 set body [read stdin]
 
 # what is stored today, to restore masked secrets
-array set current {}
-if {[file exists $ENV_FILE]} {
-    set fd [open $ENV_FILE r]
-    set content [read $fd]
-    close $fd
-    foreach line [split $content "\n"] {
-        if {[regexp {^([A-Za-z_][A-Za-z0-9_]*)=(.*)$} [string trim $line] dummy key value]} {
-            set current($key) $value
-        }
-    }
-}
+array set current [read_env_file $ENV_FILE]
 
 set out [list]
 set count 0
@@ -40,7 +30,9 @@ foreach line [split $body "\n"] {
     if {[string equal $value "********"] && [info exists current($key)]} {
         set value $current($key)
     }
-    lappend out "$key=$value"
+    # the rc.d script sources this file with the shell: a password with a space or a shell
+    # character must arrive as one value there, not as a command
+    lappend out "$key=[env_quote $value]"
     incr count
 }
 

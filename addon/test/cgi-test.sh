@@ -142,6 +142,42 @@ case "$written" in
     *) fail "keeps comments" "$written" ;;
 esac
 
+# rc.d sources this file with the shell: a value with spaces, quotes or $( ) has to come back
+# out of the shell as exactly one value, and must never execute
+tricky=$'my secret;$(touch /tmp/hm2mqtt-cgi-owned) \'quoted\''
+out="$(cgi setconfig.cgi 'sid=@1234567890@' "HM2MQTT_NAME=haus
+HM2MQTT_MQTT_URL=mqtt://other:1883
+HM2MQTT_MQTT_PASSWORD=$tricky")"
+case "$out" in
+    *'"ok":true'*) pass "accepts a password with shell characters" ;;
+    *) fail "accepts a password with shell characters" "$out" ;;
+esac
+readback="$(sh -c "set -a; . '$TREE/etc/hm2mqtt.env' 2>/dev/null; printf %s \"\$HM2MQTT_MQTT_PASSWORD\"")"
+if [ "$readback" = "$tricky" ]; then
+    pass "the shell reads the value back unchanged"
+else
+    fail "the shell reads the value back unchanged" "got: $readback"
+fi
+if [ -e /tmp/hm2mqtt-cgi-owned ]; then
+    fail "sourcing the env file executes nothing" "the \$( ) in the value ran"
+    rm -f /tmp/hm2mqtt-cgi-owned
+else
+    pass "sourcing the env file executes nothing"
+fi
+out="$(cgi getconfig.cgi 'sid=@1234567890@')"
+case "$out" in
+    *'"HM2MQTT_MQTT_URL":"mqtt://other:1883"'*) pass "getconfig serves the value unquoted" ;;
+    *) fail "getconfig serves the value unquoted" "$out" ;;
+esac
+# and the placeholder round-trip must preserve the quoted secret, not the quoting
+out="$(cgi setconfig.cgi 'sid=@1234567890@' $'HM2MQTT_NAME=haus\nHM2MQTT_MQTT_PASSWORD=********\n')"
+readback="$(sh -c "set -a; . '$TREE/etc/hm2mqtt.env' 2>/dev/null; printf %s \"\$HM2MQTT_MQTT_PASSWORD\"")"
+if [ "$readback" = "$tricky" ]; then
+    pass "the placeholder keeps a quoted secret"
+else
+    fail "the placeholder keeps a quoted secret" "got: $readback"
+fi
+
 out="$(cgi setconfig.cgi 'sid=@1234567890@' $'HM2MQTT_NAME=haus\nrm -rf /\n')"
 case "$out" in
     *'"error"'*) pass "refuses a line that is not HM2MQTT_KEY=value" ;;

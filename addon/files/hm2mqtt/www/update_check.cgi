@@ -3,18 +3,17 @@
 # The version line of the addon page in Systemsteuerung: prints the newest release tag from GitHub,
 # or "n/a" when the CCU has no internet. ?cmd=download redirects to the release page.
 
+source [file join [file dirname [info script]] lib session.tcl]
+
 set checkURL "https://api.github.com/repos/hobbyquaker/hm2mqtt.js/releases/latest"
 set downloadURL "https://github.com/hobbyquaker/hm2mqtt.js/releases/latest"
 
+# no session gate on purpose: the WebUI's version line asks before any login-bound page exists,
+# and nothing here reads or changes state
+array set params [query_params]
 set cmd ""
-catch {
-    foreach pair [split $env(QUERY_STRING) &] {
-        if {[regexp {^([^=]*)=(.*)$} $pair dummy name value]} {
-            if {[string equal $name "cmd"]} {
-                set cmd $value
-            }
-        }
-    }
+if {[info exists params(cmd)]} {
+    set cmd $params(cmd)
 }
 
 if {[string equal $cmd "download"]} {

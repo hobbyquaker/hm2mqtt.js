@@ -84,22 +84,6 @@ proc format_uptime {seconds} {
     return "${seconds}s"
 }
 
-proc versions {} {
-    global ADDON_DIR
-    set result [list]
-    if {[file exists $ADDON_DIR/versions]} {
-        set fd [open $ADDON_DIR/versions r]
-        set content [read $fd]
-        close $fd
-        foreach line [split $content "\n"] {
-            if {[regexp {^([A-Z_]+)="?([^"]*)"?$} [string trim $line] dummy key value]} {
-                lappend result $key $value
-            }
-        }
-    }
-    return $result
-}
-
 switch -- $cmd {
     start -
     stop -
@@ -122,7 +106,7 @@ switch -- $cmd {
         lappend parts "\"pid\":[json_string $pid]"
         lappend parts "\"rss\":[json_string $rss]"
         lappend parts "\"uptime\":[json_string $elapsed]"
-        foreach {key value} [versions] {
+        foreach {key value} [read_versions] {
             lappend parts "[json_string $key]:[json_string $value]"
         }
         puts "\{[join $parts ,]\}"
