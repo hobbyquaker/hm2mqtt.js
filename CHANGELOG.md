@@ -1,5 +1,48 @@
 # Changelog
 
+## 3.5.2
+
+### Fixed
+
+- **Home Assistant discovery was broken by 3.5.0's topic rework.** The whole rendered status topic
+  was handed to the core's `entity()` as an item, which prefixed `<name>/status/` and `<name>/set/`
+  once more: most entities announced `hm/status/hm/status/…` as their state topic and every
+  switchable entity a command topic under `hm/set/hm/status/…` — no state in HA, and switching did
+  nothing. The topics are now set from the rendered templates directly, command topics from the
+  _set_ template, and the tests assert the exact topics so a doubled prefix cannot pass again.
+- **Addon: a password with spaces or shell characters broke the service.** The configuration is
+  sourced by the service script's shell, but values were written unquoted — `my secret` became the
+  command `secret`, and `$( )` in a value would have executed at start. Values are now shell-quoted
+  on write and unquoted on read; a round-trip test sources the written file the way rc.d does.
+- **Addon: names could not be saved on a CCU3.** `setnames.cgi` ran the bundled node without
+  `ICU_DATA`, which the musl runtime needs to start at all — the JSON validation therefore failed
+  for every input. The ICU environment now comes from one shared helper, used by every CGI that
+  execs node (and the versions file has one parser instead of three).
+- **Addon: switches for unset options showed the wrong state.** An option absent from the env file
+  arrived as `undefined`, which did not count as "use the default" — ReGa, HA discovery and
+  maintenance all showed as off on a fresh install while actually on. Unset now means the schema
+  default, and the label says Aktiviert/Deaktiviert instead of an/aus.
+- The deprecated `--item-template` options now log a deprecation warning, and no longer overwrite a
+  `--topic-status`/`--topic-set` the user set explicitly — the conflict is named in the log instead.
+- The plain mirror tree derives its items from the configured status template instead of assuming
+  `<name>/status/…`, so a custom `--topic-status` no longer duplicates the prefix inside the tree.
+- The positional forms below `<name>/set/` (`<address>/<datapoint>`, `rega/sync`, variable and
+  program names) keep working when `--topic-set` moves elsewhere.
+- A set template whose subscription overlaps the status tree (or equals it) is warned about at
+  startup, and the bridge's own publications arriving through such a subscription are ignored
+  instead of logged as errors on every message.
+- An explicit `--ccu-tls` now prevents local mode from being probed into: a tunnel to a remote CCU
+  via loopback no longer silently drops TLS and switches to the process ports. `--local` still
+  forces it.
+
+### Changed
+
+- Local-mode detection probes its ports concurrently (one timeout instead of up to six in a row),
+  and the addon UI pauses its status polling while the browser tab is hidden.
+- Dead weight removed: the unused `channels` API command, the addon UI's unused tristate widget and
+  language plumbing, and the unused classic item-template constants. The interface checkbox list is
+  checked against `lib/interfaces.js` by the test suite.
+
 ## 3.5.1
 
 ### Changed
