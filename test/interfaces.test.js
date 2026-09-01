@@ -109,7 +109,8 @@ describe('local mode', () => {
             return port === 32010; // an HmIP-only CCU
         };
         assert.equal(await detectLocal('127.0.0.1', {connect}), true);
-        assert.deepEqual(tried, [32001, 32000, 32010]);
+        // all process ports plus ReGa's own, probed concurrently
+        assert.deepEqual([...tried].sort(), [32000, 32001, 32010, 39292, 8183].sort());
     });
 
     test('is not local when nothing answers, and never for a remote address', async () => {

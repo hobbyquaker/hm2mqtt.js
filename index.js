@@ -149,11 +149,17 @@ const renderSysvarStatus = compileTemplate(config.topicSysvarStatus);
 const renderSysvarSet = compileTemplate(config.topicSysvarSet);
 const renderProgramStatus = compileTemplate(config.topicProgramStatus);
 const renderProgramSet = compileTemplate(config.topicProgramSet);
-/** what the plain mirror tree calls an item: the status topic without the `<name>/status/` head */
+/** the literal part of the status template - what every rendered status topic starts with */
+const statusLiteral = subscribePattern(config.topicStatus, topicFields).replace(/#$/, '');
+/** what the plain mirror tree calls an item: the status topic without the template's literal head */
 const plainItem = (topic) => {
-    const head = `${config.name}/status/`;
-    return topic.startsWith(head) ? topic.slice(head.length) : topic;
+    const remainder = templateRemainder(config.topicStatus, topic, topicFields);
+    return remainder === null || remainder === '' ? topic : remainder;
 };
+/** the set subscriptions that leave `<name>/set/` and therefore need a listen pattern */
+const listenPatterns = [...new Set([config.topicSet, config.topicSysvarSet, config.topicProgramSet])]
+    .map((template) => subscribePattern(template, topicFields))
+    .filter((pattern) => !pattern.startsWith(`${config.name}/set/`));
 const adapter = createAdapter({
     pkg,
     config,
@@ -190,12 +196,7 @@ const adapter = createAdapter({
      * the index is keyed by.
      */
     onSet: (parts, value, topic) => handleSetTopic(topic, value),
-    listen: Object.fromEntries(
-        [...new Set([config.topicSet, config.topicSysvarSet, config.topicProgramSet])]
-            .map((template) => subscribePattern(template, topicFields))
-            .filter((pattern) => !pattern.startsWith(`${config.name}/set/`))
-            .map((pattern) => [pattern, handleSetTopic]),
-    ),
+    listen: Object.fromEntries(listenPatterns.map((pattern) => [pattern, handleSetTopic])),
     subscriptions: {
         'paramset/#': handleParamset,
         ...(config.rpcTopics ? {'rpc/+/+/+': handleRpc} : {}),
@@ -205,6 +206,21 @@ const adapter = createAdapter({
 });
 const {log, pubStatus} = adapter;
 
+for (const warning of config.$warnings || []) {
+    log.warn(warning);
+}
+if (config.topicStatus === config.topicSet) {
+    log.warn('--topic-status and --topic-set are identical: every own publication would come back as a set');
+}
+for (const pattern of listenPatterns) {
+    const literal = pattern.replace(/#$/, '');
+    if (statusLiteral.startsWith(literal)) {
+        log.warn(
+            `the set subscription ${pattern} also matches the status topics under ${statusLiteral} - own publications there are ignored`,
+        );
+    }
+}
+
 /*
  * Running on the CCU itself, the interface processes are on loopback and the familiar
  * 2000/2001/2010/9292/8181 are only lighttpd proxies in front of them: an extra hop, XML over HTTP
@@ -212,7 +228,9 @@ const {log, pubStatus} = adapter;
  * default we probe, because node-red-contrib-ccu's config-file check stopped working on current
  * firmware (see lib/interfaces.js).
  */
-const localMode = config.local === undefined ? await detectLocal(host) : Boolean(config.local);
+// an explicit --ccu-tls is a tunnel or a proxy by definition - local mode would silently drop the
+// TLS and the ports the user asked for, so it is never probed into, only chosen with --local
+const localMode = config.local === undefined ? !config.ccuTls && (await detectLocal(host)) : Boolean(config.local);
 if (localMode) {
     log.info('local mode: BidCos over binrpc (32001/32000), hmipserver on 32010, ReGa on 8183');
 }
@@ -560,11 +578,21 @@ async function handleSetTopic(topic, value) {
     }
     let target = topicIndex.get(topic);
     if (!target) {
-        const remainder = templateRemainder(config.topicSet, topic, topicFields);
+        // the reserved namespace stays positional whatever the template says: the address form,
+        // the rega commands and the sysvar/program names below <name>/set/ keep working
+        const head = `${config.name}/set/`;
+        const remainder = topic.startsWith(head)
+            ? topic.slice(head.length)
+            : templateRemainder(config.topicSet, topic, topicFields);
         const positional = remainder === null ? null : remainder.split('/').filter(Boolean);
         target = positional && positional.length > 0 ? resolveSet(positional, lookup) : null;
     }
     if (!target) {
+        // a set subscription that overlaps the status tree (a template whose literal part ends
+        // above it) delivers our own publications here - those are not errors
+        if (statusLiteral && topic.startsWith(statusLiteral)) {
+            return;
+        }
         throw new Error('unknown channel, variable or program');
     }
     switch (target.kind) {

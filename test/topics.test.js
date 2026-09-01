@@ -9,7 +9,6 @@ import {
     plainValue,
     compileTemplate,
     ItemIndex,
-    DEFAULT_ITEM_TEMPLATE,
     subscribePattern,
     templateRemainder,
     DEFAULT_TOPIC_STATUS,
@@ -106,7 +105,7 @@ describe('item templates', () => {
     };
 
     test('default template renders the classic item, fallbacks and case-insensitive fields', () => {
-        const render = compileTemplate(DEFAULT_ITEM_TEMPLATE);
+        const render = compileTemplate('${channelName|channel}/${datapoint}');
         assert.deepEqual(render(fields), {name: 'Licht Küche/STATE', changed: false});
         assert.deepEqual(render({...fields, channelName: undefined}), {name: 'ABC:1/STATE', changed: false});
         assert.equal(compileTemplate('${CHANNELNAME}/${DataPoint}')(fields).name, 'Licht Küche/STATE');
