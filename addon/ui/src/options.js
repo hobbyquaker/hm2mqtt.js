@@ -9,6 +9,13 @@
  * is configurable in the UI (H-38).
  */
 
+/**
+ * The interfaces the checkbox row offers. lib/interfaces.js is the source of truth, but it imports
+ * node:net and cannot be bundled for the browser - test/addon-ui.test.js fails when this copy
+ * drifts from INTERFACE_NAMES there.
+ */
+export const INTERFACE_NAMES = ['BidCos-RF', 'BidCos-Wired', 'HmIP-RF', 'VirtualDevices', 'CUxD'];
+
 export const GROUPS = [
     {id: 'ccu', de: 'Schnittstellen der CCU', en: 'CCU interfaces', open: true},
     {id: 'mqtt', de: 'MQTT', en: 'MQTT', open: true},

@@ -6,12 +6,11 @@
      */
     import {onMount} from 'svelte';
     import * as api from './api.js';
-    import {GROUPS, OPTIONS, NOT_APPLICABLE, widgetFor} from './options.js';
+    import {GROUPS, OPTIONS, widgetFor} from './options.js';
     import Field from './Field.svelte';
 
     // German, and only German: a CCU is a German-market device, and a switch nobody flips is a
     // button in the way. The English strings stay in the source as documentation of the intent.
-    const lang = 'de';
     const t = (de, _en) => de;
 
     let schema = $state(null);
@@ -167,8 +166,18 @@
 
     onMount(() => {
         load();
-        const timer = setInterval(refreshStatus, 10000);
-        return () => clearInterval(timer);
+        // every poll forks a tclsh and asks ReGa on the CCU - a hidden tab does not get to do that
+        const timer = setInterval(() => {
+            if (document.visibilityState !== 'hidden') refreshStatus();
+        }, 10000);
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') refreshStatus();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     });
 </script>
 
@@ -273,7 +282,6 @@
                                     label={field.ui.de}
                                     widget={widgetFor(field.key, field.schema)}
                                     bind:value={values[envOf(field.key)]}
-                                    {lang}
                                     {actions}
                                 />
                             {/each}

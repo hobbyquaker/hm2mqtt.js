@@ -9,7 +9,6 @@
  *   node scripts/addon-api.js discover   [--timeout 4000]
  *   node scripts/addon-api.js probe      --host 127.0.0.1 [--tls]
  *   node scripts/addon-api.js mqtt-test  --url mqtt://host:1883 [--username u] [--password p]
- *   node scripts/addon-api.js channels   --host 127.0.0.1 [--limit 20]
  *   node scripts/addon-api.js preview    --host 127.0.0.1 --template '${prefix}/status/${channelName|channel}/${datapoint}' [--prefix hm]
  *
  * Errors are JSON too ({"error": "..."}), so the UI never has to parse a stack trace.
@@ -17,7 +16,7 @@
 
 import Rega from 'homematic-rega';
 import {discover} from 'mqtt-interfaces-core';
-import {probeInterfaces, detectLocal, INTERFACE_NAMES} from '../lib/interfaces.js';
+import {probeInterfaces, detectLocal, isLocalHost, regaPort, INTERFACE_NAMES} from '../lib/interfaces.js';
 import {discoveryHint, interfacesOf} from '../lib/discovery.js';
 import {compileTemplate, DEFAULT_TOPIC_STATUS} from '../lib/topics.js';
 
@@ -53,10 +52,9 @@ const args = parseArgs(rest);
  * @returns {Rega}
  */
 function rega({host = '127.0.0.1', port, username, password} = {}) {
-    const local = host === '127.0.0.1' || host === 'localhost';
     return new Rega({
         host,
-        port: port ? Number(port) : local ? 8183 : 8181,
+        port: port ? Number(port) : regaPort({local: isLocalHost(host)}),
         username,
         password,
         translate: false,
@@ -115,15 +113,6 @@ const commands = {
         } finally {
             client.end(true);
         }
-    },
-
-    async channels() {
-        const limit = Number(args.limit || 20);
-        const channels = await rega(args).getChannels();
-        return {
-            count: channels.length,
-            channels: channels.slice(0, limit).map(({address, name}) => ({address, name})),
-        };
     },
 
     async preview() {

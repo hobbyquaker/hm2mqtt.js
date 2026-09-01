@@ -4,15 +4,20 @@
      * few options where a plain input is not enough - a button that asks the CCU instead of asking
      * the user to know the answer.
      */
-    let {name, schema, label, widget, value = $bindable(), lang, actions} = $props();
+    import {INTERFACE_NAMES} from './options.js';
+
+    let {name, schema, label, widget, value = $bindable(), actions} = $props();
 
     const t = (de, _en) => de;
     let placeholder = $derived(schema.default === undefined || schema.default === null ? '' : String(schema.default));
+    // an option absent from the env file arrives as undefined, and means "schema default" exactly
+    // like the empty string does
+    let boolOn = $derived(
+        value === 'true' || ((value === undefined || value === null || value === '') && schema.default === true),
+    );
 
     let running = $state('');
     let result = $state(null);
-
-    const INTERFACES = ['BidCos-RF', 'BidCos-Wired', 'HmIP-RF', 'VirtualDevices', 'CUxD'];
 
     let selectedInterfaces = $derived(
         String(value || '')
@@ -25,7 +30,7 @@
     function toggleInterface(iface) {
         const set = new Set(selectedInterfaces);
         set.has(iface) ? set.delete(iface) : set.add(iface);
-        value = INTERFACES.filter((i) => set.has(i)).join(',');
+        value = INTERFACE_NAMES.filter((i) => set.has(i)).join(',');
     }
 
     let globs = $derived(
@@ -69,17 +74,11 @@
             <input
                 id={name}
                 type="checkbox"
-                checked={value === 'true' || (value === '' && schema.default === true)}
+                checked={boolOn}
                 onchange={(e) => (value = e.currentTarget.checked ? 'true' : 'false')}
             />
-            <span>{value === 'true' || (value === '' && schema.default === true) ? t('an', 'on') : t('aus', 'off')}</span>
+            <span>{boolOn ? t('Aktiviert', 'Enabled') : t('Deaktiviert', 'Disabled')}</span>
         </label>
-    {:else if widget === 'tristate'}
-        <select id={name} bind:value>
-            <option value="">{t('automatisch erkennen', 'detect automatically')}</option>
-            <option value="true">{t('ja', 'yes')}</option>
-            <option value="false">{t('nein', 'no')}</option>
-        </select>
     {:else if widget === 'select'}
         <select id={name} bind:value>
             <option value="">{t('Standard', 'default')} ({placeholder})</option>
@@ -93,7 +92,7 @@
         <input id={name} type="number" bind:value {placeholder} />
     {:else if widget === 'interfaces'}
         <div class="interfaces">
-            {#each INTERFACES as iface}
+            {#each INTERFACE_NAMES as iface}
                 <label class="check">
                     <input
                         type="checkbox"

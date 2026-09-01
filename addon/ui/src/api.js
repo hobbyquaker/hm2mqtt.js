@@ -72,7 +72,7 @@ export const setNames = (text) =>
     json(`setnames.cgi?${query()}`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: text});
 
 /**
- * The helpers that need node: discover, probe, mqtt-test, channels, preview.
+ * The helpers that need node: discover, probe, mqtt-test, preview.
  * @param {string} cmd
  * @param {object} [params]
  */

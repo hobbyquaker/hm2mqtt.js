@@ -11,7 +11,8 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 
-import {GROUPS, OPTIONS, NOT_APPLICABLE, widgetFor} from '../addon/ui/src/options.js';
+import {GROUPS, OPTIONS, NOT_APPLICABLE, INTERFACE_NAMES, widgetFor} from '../addon/ui/src/options.js';
+import {INTERFACE_NAMES as REAL_INTERFACE_NAMES} from '../lib/interfaces.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -64,6 +65,12 @@ describe('addon configuration UI', () => {
                 assert.equal(widget, 'switch', `${key} is a boolean and should be a switch`);
             }
         }
+    });
+
+    it('offers exactly the interfaces the adapter knows', () => {
+        // options.js carries a copy because lib/interfaces.js imports node:net and cannot be
+        // bundled for the browser - order does not matter, the set does
+        assert.deepEqual([...INTERFACE_NAMES].sort(), [...REAL_INTERFACE_NAMES].sort());
     });
 
     it('has no empty group', () => {
