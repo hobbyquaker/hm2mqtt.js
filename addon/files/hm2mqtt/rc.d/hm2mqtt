@@ -12,7 +12,14 @@ WWW_DIR=$CONF_DIR/addons/www/$ADDON
 NODE=$ADDON_DIR/bin/node
 APP=$ADDON_DIR/app/index.js
 ENV_FILE=$ADDON_DIR/etc/hm2mqtt.env
-PIDFILE=/var/run/$ADDON.pid
+# /var/run belongs to root. On openccu-lite's systemd products an addon may run confined, as its
+# own user, and gets /run/addon-<name>/ from the unit's RuntimeDirectory - use that when it is
+# there. On a CCU (and for an unconfined addon) nothing changes.
+if [ -d /run/addon-$ADDON ]; then
+    PIDFILE=/run/addon-$ADDON/$ADDON.pid
+else
+    PIDFILE=/var/run/$ADDON.pid
+fi
 LOG=$ADDON_DIR/var/hm2mqtt.log
 LOG_MAX=1048576
 

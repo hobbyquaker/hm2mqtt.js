@@ -19,7 +19,13 @@ if {[info exists env(HM2MQTT_ADDON_DIR)]} {
 set ENV_FILE $ADDON_DIR/etc/hm2mqtt.env
 set NAMES_FILE $ADDON_DIR/etc/names.json
 set LOG_FILE $ADDON_DIR/var/hm2mqtt.log
-set PID_FILE /var/run/hm2mqtt.pid
+# the same fallback the rc.d script makes: a confined addon on openccu-lite writes its pid file
+# into the run directory its unit created, because /var/run is root's
+if {[file isdirectory /run/addon-hm2mqtt]} {
+    set PID_FILE /run/addon-hm2mqtt/hm2mqtt.pid
+} else {
+    set PID_FILE /var/run/hm2mqtt.pid
+}
 set RC_SCRIPT /usr/local/etc/config/rc.d/hm2mqtt
 
 # the test harness runs the CGIs from a copy of the tree and points these elsewhere
