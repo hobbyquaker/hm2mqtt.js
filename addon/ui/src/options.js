@@ -57,6 +57,10 @@ export const NOT_APPLICABLE = {
     'ccu-password': 'the direct ports have no authentication',
     'ccu-tls': 'the direct ports carry no TLS',
     'ccu-insecure': 'the direct ports carry no TLS',
+    // On openccu-lite the addon runs on the box: the metadata api is on its own loopback and the
+    // credential is the box's local token, which hm2mqtt reads by itself. On a CCU neither exists.
+    'meta-token': "read from the box's local token file; nothing to configure on the box",
+    'meta-url': 'always the box this addon runs on',
 };
 
 export const OPTIONS = {

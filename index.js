@@ -20,6 +20,7 @@ import {RpcServers, RpcConnection} from './lib/rpc.js';
 import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
+import {MetaSync, detectMeta} from './lib/meta.js';
 import {castValue, isWriteable} from './lib/cast.js';
 import {
     sanitizeName,
@@ -66,6 +67,8 @@ const SET_THROTTLE_MS = 500;
 const DEVICES_WAIT_MS = 10000;
 const STOP_TIMEOUT_MS = 1500;
 const RESOLVE_RETRY_MS = 10000;
+/** how often an unreachable box is probed for the metadata api again (H-47) */
+const REDETECT_MS = 60000;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** the configured CCU address (the `ccu` field of every payload); connections use the resolved ip */
@@ -186,6 +189,7 @@ const adapter = createAdapter({
         interfaces: enabled,
         devices: metadata.count(),
         rega: Boolean(regaSync),
+        names: regaSync ? regaSync.label : 'addresses',
         payload: payloadFormat,
     }),
     /*
@@ -238,8 +242,20 @@ if (localMode) {
 const metadata = new Metadata({stateDir: config.stateDir, seedFile: path.join(here, 'paramsets.json'), log});
 metadata.load();
 
+/*
+ * Where names, rooms and functions come from (H-46): openccu-lite has no ReGaHSS, but a metadata
+ * api that answers `GET /api/meta/v1/version` and nothing else does. That one call is the whole
+ * detection - no new option, no hostname or port heuristics, so a configuration moved between a
+ * CCU and an openccu-lite box keeps working untouched. Explicit --no-rega still means "addresses
+ * only" on both.
+ */
+const metaUrl = config.metaUrl || `${config.ccuTls ? 'https' : 'http'}://${host}`;
+/** true while the box has not answered the probe at all: something may still come up there */
+let redetect = false;
+let redetectTimer = null;
 let regaSync = null;
-if (config.rega) {
+
+function createRega() {
     const rega = new Rega({
         host: ccuIp,
         port: regaPort({tls: config.ccuTls, local: localMode}),
@@ -249,7 +265,37 @@ if (config.rega) {
         password: config.ccuPassword,
         timeZone: config.ccuTimezone,
     });
-    regaSync = new RegaSync({rega, host, metadata, stateDir: config.stateDir, nameFile, log});
+    return new RegaSync({rega, host, metadata, stateDir: config.stateDir, nameFile, log});
+}
+
+function createMeta() {
+    return new MetaSync({
+        url: metaUrl,
+        token: config.metaToken,
+        insecure: config.ccuInsecure,
+        fixedUrl: Boolean(config.metaUrl),
+        metadata,
+        stateDir: config.stateDir,
+        nameFile,
+        log,
+    });
+}
+
+if (config.rega) {
+    const found = await detectMeta(metaUrl, {insecure: config.ccuInsecure});
+    if (found.ok) {
+        log.info(
+            'openccu-lite on',
+            host + ':',
+            found.version.implementation || 'metadata api v' + found.version.version,
+            '- names, rooms and functions from the metadata api',
+        );
+        regaSync = createMeta();
+    } else {
+        log.debug('no metadata api on', host, '(' + found.reason + ') - using ReGa');
+        redetect = !found.reachable;
+        regaSync = createRega();
+    }
     regaSync.load();
 }
 
@@ -806,15 +852,67 @@ function createConnection(iface) {
  */
 
 async function startRega() {
+    if (regaSync instanceof MetaSync) {
+        // one line, once: everything a ReGa box could do and this one cannot (porting invariant 4).
+        // The options stay accepted so a configuration works on both kinds of box.
+        log.info(
+            'occulite: no ReGaHSS on this box - system variables, programs and the value cache are',
+            'not available; --rega-poll-interval, --rega-poll-trigger, --publish-cache and the',
+            'sysvar/program topics do nothing here',
+        );
+    }
     try {
         await regaSync.syncNames();
     } catch (err) {
         log.warn(
-            'rega: names not available (' + err.message + '), using',
+            regaSync.label + ': names not available (' + err.message + '), using',
             Object.keys(regaSync.channelNames).length,
             'cached names',
         );
     }
+    warnDuplicateNames();
+    attachProvider();
+    regaSync.startPolling(config.regaPollInterval);
+    if (regaSync.rega) {
+        loadCache().catch((err) => log.warn('rega getValues failed:', err.message));
+    }
+    if (config.regaNamesInterval > 0) {
+        timers.push(setInterval(() => resyncNames(), config.regaNamesInterval * 1000));
+    }
+    if (redetect) {
+        // nothing answered the probe at start (the box was down or still booting): ReGa was the
+        // fallback, and an openccu-lite that comes up later must not need a restart of this
+        // service to be recognised
+        redetectTimer = setInterval(
+            () => redetectProvider().catch((err) => log.debug('re-detection failed:', err.message)),
+            REDETECT_MS,
+        );
+        timers.push(redetectTimer);
+    }
+}
+
+/** The provider's events, wired the same way whichever provider it is. */
+function attachProvider() {
+    regaSync.on('names', scheduleIndex);
+    regaSync.on('sysvar', publishRega);
+    regaSync.on('program', publishRega);
+    regaSync.on('polled', () => {
+        if (!regaOk) {
+            regaOk = true;
+            log.info(regaSync.label + ' connected');
+            updateConnected();
+        }
+    });
+    regaSync.on('error', () => {
+        if (regaOk) {
+            regaOk = false;
+            log.warn(regaSync.label + ' disconnected');
+            updateConnected();
+        }
+    });
+}
+
+function warnDuplicateNames() {
     const duplicates = Object.entries(
         Object.values(regaSync.channelNames).reduce((acc, name) => ((acc[name] = (acc[name] || 0) + 1), acc), {}),
     )
@@ -827,33 +925,38 @@ async function startRega() {
             duplicates.length > 20 ? '…' : '',
         );
     }
-    regaSync.on('names', scheduleIndex);
-    regaSync.on('sysvar', publishRega);
-    regaSync.on('program', publishRega);
-    regaSync.on('polled', () => {
-        if (!regaOk) {
-            regaOk = true;
-            log.info('rega connected');
-            updateConnected();
-        }
-    });
-    regaSync.on('error', () => {
-        if (regaOk) {
-            regaOk = false;
-            log.warn('rega disconnected');
-            updateConnected();
-        }
-    });
-    regaSync.startPolling(config.regaPollInterval);
-    loadCache().catch((err) => log.warn('rega getValues failed:', err.message));
-    if (config.regaNamesInterval > 0) {
-        timers.push(
-            setInterval(
-                () => regaSync.syncNames().catch((err) => log.warn('rega names re-sync failed:', err.message)),
-                config.regaNamesInterval * 1000,
-            ),
-        );
+}
+
+function resyncNames() {
+    return regaSync.syncNames().catch((err) => log.warn(regaSync.label + ' names re-sync failed:', err.message));
+}
+
+/** Probes a box that did not answer at start; switches to the metadata api when it now does. */
+async function redetectProvider() {
+    const found = await detectMeta(metaUrl, {insecure: config.ccuInsecure});
+    if (!found.reachable) {
+        return;
     }
+    // something answers now - whatever it is, this question is settled
+    redetect = false;
+    if (redetectTimer) {
+        clearInterval(redetectTimer);
+        redetectTimer = null;
+    }
+    if (!found.ok) {
+        log.debug('no metadata api on', host, '(' + found.reason + ') - staying with ReGa');
+        return;
+    }
+    log.info('openccu-lite answered on', host + ': switching from ReGa to the metadata api');
+    const previous = regaSync;
+    previous.stopPolling();
+    previous.removeAllListeners();
+    regaSync = createMeta();
+    regaSync.load();
+    attachProvider();
+    regaOk = false;
+    await resyncNames();
+    scheduleIndex();
 }
 
 /** The ReGa's copy of every datapoint value: seeds the value store, published with --publish-cache. */
@@ -885,10 +988,12 @@ async function loadCache() {
 async function start() {
     adapter.start();
     ccuIp = await resolveCcu();
-    if (regaSync) {
+    if (regaSync && regaSync.rega) {
         regaSync.rega.host = ccuIp;
         regaSync.rega.url = regaSync.rega.url.replace(host, ccuIp);
         regaSync.rega.webUrl = regaSync.rega.webUrl.replace(host, ccuIp);
+    } else if (regaSync) {
+        regaSync.setHost(ccuIp);
     }
     enabled =
         parseInterfaces(config.interfaces) || (await probeInterfaces(ccuIp, {tls: config.ccuTls, local: localMode}));

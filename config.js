@@ -72,6 +72,16 @@ export const OPTIONS = {
         type: 'string',
         describe: 'channel.datapoint whose event triggers a variable/program poll, e.g. BidCoS-RF:50.PRESS_SHORT',
     },
+    'meta-token': {
+        type: 'string',
+        describe:
+            'openccu-lite API token (olt_...) for names, rooms and functions - not needed on the box itself, where the local token is read',
+        secret: true,
+    },
+    'meta-url': {
+        type: 'string',
+        describe: "base url of openccu-lite's metadata api (default: http[s]://<ccu-address>)",
+    },
     'ccu-timezone': {type: 'string', describe: "IANA time zone of the CCU (default: this host's time zone)"},
     'name-file': {
         alias: 'm',
