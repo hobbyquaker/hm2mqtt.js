@@ -259,7 +259,51 @@ the plain format (the second `ccu-mqtt` node of a flow).
 Names come from the ReGa (devices, channels, rooms, functions), are cached in the state
 directory and re-read with `<name>/set/rega/sync`. A `--name-file` overrides single addresses.
 Without the ReGa (`--no-rega`) topics use addresses. Events of channels without a name use the
-address as well.
+address as well. On a box without ReGaHSS they come from the metadata API instead — see
+[openccu-lite](#openccu-lite).
+
+## openccu-lite
+
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite) is a CCU firmware without ReGaHSS.
+hm2mqtt works there without a changed configuration: at start (and again on reconnect) it asks
+`GET http://<ccu-address>/api/meta/v1/version`, and when that answers it takes device and channel
+names, rooms and functions from the box's **metadata API** instead of from the ReGa. A CCU3,
+RaspberryMatic or OpenCCU answers 404 there and everything stays exactly as before — the same
+configuration works on both, which is what a backup restored on the other kind of box needs.
+
+Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
+a rename in the box's UI is in the topics about a second later, without a poll and without a
+restart. The store is cached in `meta.json` in the state directory, so a start without the box
+still has the names. `<name>/set/rega/sync` re-reads the snapshot here too.
+
+**The credential.** Everything but the version call needs one:
+
+| where hm2mqtt runs | credential                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| on the box (addon) | the box's own read-only token, read from `/usr/local/etc/occulite/local-token` — nothing to configure |
+| anywhere else      | `--meta-token` (`HM2MQTT_META_TOKEN`): an API token (`olt_…`) created on the box under _Benutzer_     |
+
+Without a valid credential hm2mqtt logs one line and runs on addresses; it picks the names up as
+soon as a token works, without a restart. `--meta-url` overrides the base url when the box is
+behind a proxy or on another port. Note that openccu-lite's interface processes listen on loopback
+only, so hm2mqtt normally runs **on** the box (addon package) or goes through its XML-RPC proxy.
+
+**What has no replacement** on such a box (from openccu-lite's `docs/porting-from-rega.md`):
+
+- **System variables** and **programs**: there is no ReGa DOM. Users who need them run automation
+  in Node-RED (RedMatic), Home Assistant, or whatever the addon is bridging to.
+- **`exec()`** of HM-Script, `dom.GetObject`, `system.GetSessionVarStr` from your own code: gone.
+- **ReGa ids** (`dom.GetObject(1234)`): there are none. Refs (`<interface>.<address>`) are the identity.
+- **Service messages / alarms** (variables 40 and 41): interface-level state only.
+- **The CCU WebUI's JSON-RPC API** (`/api/homematic.cgi`, `Session.login`, `Device.listAll`,
+  `Interface.*`): not present.
+
+In hm2mqtt that means: no `status/<variable>` and `status/<program>` topics and no writes to them,
+and no `--publish-cache` (the value cache was ReGa's `getValues`). `--rega-poll-interval`,
+`--rega-poll-trigger` and the `--topic-sysvar-*`/`--topic-program-*` templates stay accepted so one
+configuration serves both kinds of box; on openccu-lite they do nothing and one log line at start
+says so. Rooms and functions are trees there — a channel in `room/eg/wohnzimmer` is reported as
+`Wohnzimmer`, the parent nodes are not added, so `hm.rooms` looks exactly as it did on a CCU.
 
 ## Home Assistant
 
