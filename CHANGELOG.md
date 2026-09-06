@@ -1,5 +1,44 @@
 # Changelog
 
+## 3.6.0
+
+### Added
+
+- **hm2mqtt runs on [openccu-lite](https://github.com/hobbyquaker/openccu-lite)** — a CCU firmware
+  without ReGaHSS. Names, rooms and functions come from the box's metadata API there, and nothing
+  else changes: the topics, the `hm` block and every payload look exactly as they do on a CCU3,
+  RaspberryMatic or OpenCCU. The box is recognised at start by one call to
+  `GET /api/meta/v1/version` (no authentication, a CCU answers 404), so the same configuration
+  works on both kinds of box and a backup moved from one to the other needs no edit. A box that
+  did not answer at all is probed again every minute, so an openccu-lite that boots after hm2mqtt
+  does not need a restart of the service.
+- The names come as a snapshot and are then kept current from the box's event stream
+  (`/api/meta/v1/events/sse`, reconnecting with `?since=<revision>`): a rename on the box is in
+  the topics about a second later, without polling and without a restart. The store is cached in
+  `meta.json` in the state directory, so a start without the box still has names. No new
+  dependency — the stream is `node:http`.
+- `--meta-token` (`HM2MQTT_META_TOKEN`) for the credential when hm2mqtt does not run on the box;
+  on the box itself the read-only token in `/usr/local/etc/occulite/local-token` is used
+  automatically. Without a valid credential hm2mqtt logs one line and runs on addresses, and
+  picks the names up as soon as a token works. `--meta-url` overrides the base url behind a proxy.
+- `<name>/info` says where names come from: `"names": "rega" | "occulite" | "addresses"`.
+
+### Changed
+
+- On openccu-lite one line at start names what a box without ReGaHSS cannot do — system
+  variables, programs and the value cache. `--rega-poll-interval`, `--rega-poll-trigger`,
+  `--publish-cache` and the sysvar/program topic templates stay accepted (and do nothing there),
+  so one configuration serves both kinds of box. The README has the full list of what has no
+  replacement.
+- The ReGa path is untouched: on a CCU the behaviour, the log lines and the published messages are
+  the same as in 3.5.2. Both providers now share the name-file and reverse-lookup code
+  (`lib/names.js`).
+
+### Fixed
+
+- The end-to-end test could not run on a machine without mosquitto: aedes 1.x removed the default
+  export it constructed (`Aedes.createBroker()` now).
+
 ## 3.5.2
 
 ### Fixed
