@@ -2,3 +2,6 @@ addon/ui/dist/
 addon/ui/node_modules/
 addon/work/
 dist/
+# openccu-lite's conformance corpus, copied byte for byte from its fixtures/store - reformatting
+# them would make a diff against the source impossible
+test/fixtures/meta/

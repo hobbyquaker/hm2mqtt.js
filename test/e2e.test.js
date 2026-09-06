@@ -78,8 +78,9 @@ async function startBroker(port) {
         await waitPort(port);
         return {kind: 'mosquitto', close: async () => child.kill()};
     }
-    const {default: Aedes} = await import('aedes');
-    const aedes = new Aedes();
+    // aedes 1.x: the default export throws, the broker is created through the factory
+    const {Aedes} = await import('aedes');
+    const aedes = await Aedes.createBroker();
     const server = net.createServer(aedes.handle);
     await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
     return {
