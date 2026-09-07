@@ -81,8 +81,11 @@ jobs:
       # patchelf rewrites the armv7l runtime's ELF headers, tcl runs the CGI tests
       - run: sudo apt-get update && sudo apt-get install -y patchelf tcl
       - run: addon/test/cgi-test.sh
-      # -beta until the package has been installed on real CCU hardware (H-41)
-      - run: addon/build.sh ${{ matrix.arch }} --beta
+      # H-41's "-beta until installed on real CCU hardware" marker is gone (openccu-lite B-22):
+      # 3.6.0 ran end to end on a real box on 2026-09-07 - 126 devices, names, rooms and functions
+      # taken from occulited's metadata API - so the addon half is proven. What is still untested is
+      # openccu-lite on ARM hardware, which is that project's release gate, not this package's.
+      - run: addon/build.sh ${{ matrix.arch }}
       # unpacks the package into the layout a CCU installs it into, symlink included, and serves
       # the pages the way lighttpd does
       - run: addon/test/package-test.sh dist/*.tar.gz
