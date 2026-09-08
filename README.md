@@ -372,8 +372,8 @@ Same topics for events, variables, programs, counters, `set` and `paramset`. Dif
 ## Development
 
 `npm test` (node:test, no CCU needed), `npm run lint`. `deploy.sh` ships the package (and
-`file:../` siblings) to a host and restarts the `hm2mqtt@*` units. Plan and decisions:
-[ROADMAP.md](ROADMAP.md); changes: [CHANGELOG.md](CHANGELOG.md).
+`file:../` siblings) to a host and restarts the `hm2mqtt@*` units. Plan and decisions: the
+roadmap, kept outside this repository; changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
