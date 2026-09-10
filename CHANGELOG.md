@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.6.1
+
+### Fixed
+
+- **Home Assistant refused every device hm2mqtt published.** The availability entries of the
+  discovery payload carried `avty_tpl` — the shared one from the core and the `UNREACH` one of every
+  device. Inside an entry of an `availability` list that key expands to `availability_template`,
+  which Home Assistant's schema for such an entry does not allow (there the template is `val_tpl`),
+  and the device payload is validated as a whole: HA logged "Invalid MQTT device discovery payload"
+  through `homeassistant.components.mqtt.discovery` and created nothing of the device. Found on
+  lgtv2mqtt ([#20](https://github.com/hobbyquaker/lgtv2mqtt/issues/20)), fixed in
+  `mqtt-interfaces-core` 0.15.2 and here.
+  **After updating**, clear the retained discovery messages once so nothing of the refused payloads
+  is left: `mosquitto_sub -t 'homeassistant/device/hm2mqtt_#' -v` shows them, publishing an empty
+  retained message to such a topic removes it.
+
 ## 3.6.0
 
 ### Added

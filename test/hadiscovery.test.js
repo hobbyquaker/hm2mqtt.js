@@ -124,6 +124,13 @@ describe('discoveryModel', () => {
         assert.equal(b.availabilityMode, 'all');
         assert.equal(b.availability.length, 2);
         assert.match(b.availability[1].t, /:0\/UNREACH$/);
+        // the template of an availability entry is `val_tpl`: `avty_tpl` expands to
+        // `availability_template`, which Home Assistant's schema for a list entry refuses -
+        // and it refuses the whole device payload over it (core 0.15.2)
+        assert.equal(b.availability[1].avty_tpl, undefined);
+        assert.match(b.availability[1].val_tpl, /offline/);
+        assert.equal(b.availability[0].avty_tpl, undefined);
+        assert.match(b.availability[0].val_tpl, />= 2/);
         const sw = b.components['1_STATE'];
         assert.equal(sw.p, 'switch');
         assert.equal(sw.pl_on, 'true');
