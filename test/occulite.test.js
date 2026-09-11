@@ -146,7 +146,6 @@ const document = {
             ],
         },
         function: {name: {de: 'Gewerke', en: 'Functions'}, tree: [{id: 'licht', name: 'Licht'}]},
-        floor: {name: {de: 'Etagen', en: 'Floors'}, tree: []},
     },
 };
 
