@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A failed `init` is retried after 2 s, 4 s, 8 s and 16 s, then every 30 s**, instead of every 30 s from the start.
+  An interface process that answers a second after a failed attempt (hm2mqtt started before it, or the process was
+  restarted) is used within seconds instead of up to half a minute later. The warning names the next attempt
+  (_"init failed: connect ECONNREFUSED … - retrying in 2 s (then up to every 30 s)"_), still once per distinct error
+  with debug lines after it, and a success after retries is logged with the number of attempts. The backoff starts
+  over after every successful `init`.
+
 ## 3.6.1
 
 ### Fixed

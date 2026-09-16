@@ -2,7 +2,7 @@ import {test, describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 
-import {RpcServers, RpcConnection, batchHints, METHODS} from '../lib/rpc.js';
+import {RpcServers, RpcConnection, batchHints, initRetryDelay, METHODS} from '../lib/rpc.js';
 import {createLogger} from 'mqtt-interfaces-core';
 
 function fakes() {
@@ -242,20 +242,103 @@ describe('RpcConnection', () => {
         assert.ok(lines.some((l) => l.includes('no event for')));
     });
 
-    test('init failure: warn once, retry every 30 s, disconnected until it works', async () => {
+    test('init failure: attempts at 2, 4, 8, 16, 30, 30 s, disconnected until it works', async () => {
         const {conn, timers, setFail, calls} = setup();
         setFail((m) => m === 'init');
         await conn.start();
         assert.equal(conn.connected, false);
         assert.equal(timers.pending(), 1);
-        const warns = () => lines.filter((l) => l.startsWith('<4>') && l.includes('init failed')).length;
-        const before = warns();
-        await timers.advance(30000);
-        assert.equal(calls.filter((c) => c.method === 'init').length, 2);
-        assert.equal(warns(), before); // repeated failure is not warned again
+        const inits = () => calls.filter((c) => c.method === 'init').length;
+        const at = [];
+        let elapsed = 0;
+        // step through in 1 s ticks and record when each attempt happens
+        while (at.length < 6) {
+            const before = inits();
+            await timers.advance(1000);
+            elapsed += 1000;
+            if (inits() > before) {
+                at.push(elapsed);
+            }
+        }
+        assert.deepEqual(at, [2000, 6000, 14000, 30000, 60000, 90000]);
+        assert.equal(conn.connected, false);
         setFail(null);
         await timers.advance(30000);
         assert.equal(conn.connected, true);
+        assert.equal(timers.pending(), 1); // the ping check, no init timer
+    });
+
+    test('init failure: one warn line naming the next attempt, then debug, info on success', async () => {
+        const {conn, timers, setFail} = setup();
+        setFail((m) => m === 'init');
+        const from = lines.length;
+        await conn.start();
+        await timers.advance(2000);
+        await timers.advance(4000);
+        setFail(null);
+        await timers.advance(8000);
+        const mine = lines.slice(from).filter((l) => l.includes('init'));
+        const warns = mine.filter((l) => l.startsWith('<4>'));
+        assert.equal(warns.length, 1);
+        assert.match(warns[0], /init failed: boom - retrying in 2 s \(then up to every 30 s\)/);
+        assert.equal(mine.filter((l) => l.startsWith('<7>') && l.includes('init failed: boom')).length, 2);
+        assert.match(
+            mine.find((l) => l.startsWith('<6>') && l.includes('succeeded')),
+            /init succeeded after 4 attempts/,
+        );
+        assert.equal(lines.slice(from).filter((l) => l.startsWith('<3>')).length, 0);
+    });
+
+    test('init failure: a different error is warned again', async () => {
+        const {conn, timers, setFail} = setup();
+        setFail((m) => m === 'init');
+        const from = lines.length;
+        await conn.start();
+        conn.client.methodCall = (method, params, cb) => setImmediate(() => cb(new Error('other')));
+        await timers.advance(2000);
+        const warns = lines.slice(from).filter((l) => l.startsWith('<4>') && l.includes('init failed'));
+        assert.equal(warns.length, 2);
+        assert.match(warns[1], /init failed: other - retrying in 4 s/);
+    });
+
+    test('the backoff resets after a successful init', async () => {
+        const {conn, timers, setFail, calls} = setup({ping: false});
+        setFail((m) => m === 'init');
+        await conn.start();
+        await timers.advance(2000);
+        await timers.advance(4000);
+        setFail(null);
+        await timers.advance(8000);
+        assert.equal(conn.connected, true);
+        assert.equal(conn.initFailures, 0);
+        // a later outage starts at 2 s again (the re-init after a ping timeout goes the same way)
+        setFail((m) => m === 'init');
+        calls.length = 0;
+        await conn.init();
+        assert.equal(conn.connected, false);
+        await timers.advance(1999);
+        assert.equal(calls.filter((c) => c.method === 'init').length, 1);
+        await timers.advance(1);
+        assert.equal(calls.filter((c) => c.method === 'init').length, 2);
+    });
+
+    test('stop() cancels the retry timer', async () => {
+        const {conn, timers, setFail, calls} = setup();
+        setFail((m) => m === 'init');
+        await conn.start();
+        assert.equal(timers.pending(), 1);
+        await conn.stop();
+        assert.equal(timers.pending(), 0);
+        calls.length = 0;
+        await timers.advance(60000);
+        assert.equal(calls.length, 0);
+    });
+
+    test('initRetryDelay', () => {
+        assert.deepEqual(
+            [1, 2, 3, 4, 5, 6, 50].map((n) => initRetryDelay(n)),
+            [2000, 4000, 8000, 16000, 30000, 30000, 30000],
+        );
     });
 
     test('stop unsubscribes', async () => {
