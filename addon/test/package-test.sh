@@ -26,6 +26,9 @@ STUB="$PWD/addon/test/stub.tcl"
 
 mkdir -p "$TMP/usr_local/addons" "$TMP/config/addons/www"
 tar xzf "$PKG" -C "$TMP/usr_local/addons" hm2mqtt
+# the openccu-lite manifest sits at the root of the archive, beside update_script; the listing
+# goes to a file (`tar | grep -q` would die of SIGPIPE under pipefail)
+tar tzf "$PKG" > "$TMP/listing.txt"
 ADDON="$TMP/usr_local/addons/hm2mqtt"
 ln -sfn "$ADDON/www" "$TMP/config/addons/www/hm2mqtt"
 cp "$ADDON/etc/default.env" "$ADDON/etc/hm2mqtt.env"
@@ -40,6 +43,12 @@ fail() {
     echo "         $2"
     failed=1
 }
+
+if grep -qxF openccu-lite.json "$TMP/listing.txt"; then
+    pass "openccu-lite.json is at the root of the archive"
+else
+    fail "openccu-lite.json is at the root of the archive" "$(cat "$TMP/listing.txt" | head -5)"
+fi
 
 # through the symlink, absolute path, working directory elsewhere - what lighttpd does
 page="$(cd / && QUERY_STRING='sid=@1234567890@' tclsh "$STUB" "$TMP/config/addons/www/hm2mqtt/settings.cgi" 2>&1)"

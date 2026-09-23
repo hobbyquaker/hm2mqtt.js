@@ -60,6 +60,8 @@ PREFIX="$PREFIX" addon/build-runtime.sh "$ARCH" "$TREE"
 cp -a addon/files/hm2mqtt/. "$TREE/"
 cp -a addon/files/update_script "$WORK/update_script"
 cp -a addon/files/hm2mqtt.cfg "$WORK/hm2mqtt.cfg"
+# the openccu-lite manifest at the root of the archive (the CCU3 and OpenCCU ignore it)
+cp -a addon/files/openccu-lite.json "$WORK/openccu-lite.json"
 # run-parts ignores files with a dot in the name, and the WebUI calls this through the symlink
 chmod +x "$WORK/update_script" "$TREE/rc.d/hm2mqtt" "$TREE/bin/update_addon" "$TREE"/www/*.cgi
 
@@ -100,10 +102,10 @@ PKG="dist/hm2mqtt-ccu-$ARCH-$VERSION.tar.gz"
 # GNU tar writes the root ownership the CCU installer expects; bsdtar (macOS, local builds) has no
 # --owner, which only matters for a package actually shipped - CI runs on Linux
 if tar --owner=root --group=root --version >/dev/null 2>&1; then
-    tar --owner=root --group=root --exclude=.DS_Store -czf "$PKG" -C "$WORK" hm2mqtt update_script hm2mqtt.cfg
+    tar --owner=root --group=root --exclude=.DS_Store -czf "$PKG" -C "$WORK" hm2mqtt update_script hm2mqtt.cfg openccu-lite.json
 else
     echo "note: GNU tar not available, package ownership will not be root"
-    tar --exclude=.DS_Store -czf "$PKG" -C "$WORK" hm2mqtt update_script hm2mqtt.cfg
+    tar --exclude=.DS_Store -czf "$PKG" -C "$WORK" hm2mqtt update_script hm2mqtt.cfg openccu-lite.json
 fi
 if command -v sha256sum >/dev/null 2>&1; then
     (cd dist && sha256sum "$(basename "$PKG")" > "$(basename "$PKG").sha256")

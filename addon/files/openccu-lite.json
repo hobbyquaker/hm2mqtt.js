@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "id": "hm2mqtt",
+  "name": "hm2mqtt",
+  "description": {
+    "de": "Homematic-Geräte per MQTT — mit den Namen und Räumen aus openccu-lite.",
+    "en": "Homematic devices over MQTT — with the names and rooms from openccu-lite."
+  },
+  "homepage": "https://github.com/hobbyquaker/hm2mqtt.js",
+  "licence": "MIT",
+  "release": {
+    "github": "hobbyquaker/hm2mqtt.js",
+    "asset": "hm2mqtt-ccu-{arch}-{version}.tar.gz"
+  },
+  "requires": {
+    "architectures": ["armv7l", "aarch64", "x86_64"]
+  }
+}
