@@ -14,5 +14,8 @@
   },
   "requires": {
     "architectures": ["armv7l", "aarch64", "x86_64"]
+  },
+  "runtime": {
+    "daemon": true
   }
 }

@@ -19,7 +19,8 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     assert.equal(manifest.release.github, 'hobbyquaker/hm2mqtt.js');
     assert.equal(manifest.release.asset, 'hm2mqtt-ccu-{arch}-{version}.tar.gz');
     assert.deepEqual(manifest.requires.architectures, ['armv7l', 'aarch64', 'x86_64']);
-    // no runtime block: the adapter needs nothing beyond its own directories, and the start order
-    // stays the platform's default until a boot measurement says otherwise
-    assert.equal(manifest.runtime, undefined);
+    // the runtime block says only that the adapter keeps a process running (openccu-lite B-158): it
+    // needs nothing beyond its own directories, and the start order stays the platform's default
+    // (no needs) until a boot measurement says otherwise
+    assert.deepEqual(manifest.runtime, {daemon: true});
 });
