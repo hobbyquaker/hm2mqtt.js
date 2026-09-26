@@ -9,6 +9,7 @@ import {
     regaPort,
     isLocalHost,
     detectLocal,
+    watchInterfaces,
 } from '../lib/interfaces.js';
 
 describe('interfaces', () => {
@@ -123,5 +124,130 @@ describe('local mode', () => {
         const open = new Set([32001, 32010]);
         const found = await probeInterfaces('127.0.0.1', {local: true, connect: async (h, port) => open.has(port)});
         assert.deepEqual(found, ['BidCos-RF', 'HmIP-RF']);
+    });
+
+    test('waits for the interface processes on a loopback address when asked to (B-1)', async () => {
+        let clock = 0;
+        const slept = [];
+        let waits = 0;
+        let open = false;
+        const connect = async () => open;
+        const sleep = async (ms) => {
+            slept.push(ms);
+            clock += ms;
+            if (clock >= 15000) {
+                open = true; // rfd answers after 15 s
+            }
+        };
+        const local = await detectLocal('127.0.0.1', {
+            connect,
+            waitMs: 120000,
+            sleep,
+            now: () => clock,
+            onWait: () => (waits += 1),
+        });
+        assert.equal(local, true);
+        assert.deepEqual(slept, [1000, 2000, 4000, 8000]);
+        assert.equal(waits, 1, 'one line while it waits');
+    });
+
+    test('does not wait when the usual ports answer on the loopback address (a tunnel, a simulator)', async () => {
+        let slept = 0;
+        const connect = async (h, port) => port === 2001 || port === 2010;
+        const local = await detectLocal('127.0.0.1', {connect, waitMs: 120000, sleep: async () => (slept += 1)});
+        assert.equal(local, false);
+        assert.equal(slept, 0);
+    });
+
+    test('gives up waiting after waitMs, and never waits for a remote address', async () => {
+        let clock = 0;
+        const sleep = async (ms) => {
+            clock += ms;
+        };
+        const local = await detectLocal('127.0.0.1', {
+            connect: async () => false,
+            waitMs: 120000,
+            sleep,
+            now: () => clock,
+        });
+        assert.equal(local, false);
+        assert.ok(clock <= 120000 && clock > 100000, String(clock));
+        let slept = 0;
+        await detectLocal('192.168.1.5', {connect: async () => false, waitMs: 120000, sleep: async () => (slept += 1)});
+        assert.equal(slept, 0);
+    });
+});
+
+describe('watchInterfaces (B-1)', () => {
+    function fakeTimers() {
+        let now = 0;
+        const timers = [];
+        return {
+            setTimeout: (fn, ms) => {
+                const t = {fn, at: now + ms};
+                timers.push(t);
+                return t;
+            },
+            clearTimeout: (t) => {
+                const i = timers.indexOf(t);
+                if (i !== -1) timers.splice(i, 1);
+            },
+            advance: async (ms) => {
+                now += ms;
+                for (const t of timers.filter((x) => x.at <= now)) {
+                    timers.splice(timers.indexOf(t), 1);
+                    await t.fn();
+                }
+            },
+            pending: () => timers.length,
+        };
+    }
+
+    test('an interface missing at the start is probed on the init schedule and handed over once when it answers', async () => {
+        const timers = fakeTimers();
+        const open = new Set();
+        const probes = [];
+        const found = [];
+        const connect = async (h, port) => {
+            probes.push(port);
+            return open.has(port);
+        };
+        const watch = watchInterfaces('127.0.0.1', ['HmIP-RF', 'VirtualDevices'], {
+            local: true,
+            connect,
+            timers,
+            onFound: (name) => found.push(name),
+        });
+        assert.deepEqual(watch.missing(), ['HmIP-RF', 'VirtualDevices']);
+        await timers.advance(999);
+        assert.equal(probes.length, 0);
+        await timers.advance(1); // 1 s
+        assert.deepEqual(probes, [32010, 39292]);
+        await timers.advance(2000); // 3 s
+        open.add(32010);
+        await timers.advance(4000); // 7 s: hmipserver answers
+        assert.deepEqual(found, ['HmIP-RF']);
+        assert.deepEqual(watch.missing(), ['VirtualDevices']);
+        probes.length = 0;
+        await timers.advance(8000); // 15 s: only the one still missing is probed
+        assert.deepEqual(probes, [39292]);
+        open.add(39292);
+        await timers.advance(15000);
+        assert.deepEqual(found, ['HmIP-RF', 'VirtualDevices']);
+        assert.equal(timers.pending(), 0, 'nothing left to probe');
+    });
+
+    test('stop() ends the probing', async () => {
+        const timers = fakeTimers();
+        const watch = watchInterfaces('127.0.0.1', ['CUxD'], {connect: async () => false, timers, onFound: () => {}});
+        assert.equal(timers.pending(), 1);
+        watch.stop();
+        assert.equal(timers.pending(), 0);
+    });
+
+    test('nothing missing, nothing scheduled', () => {
+        const timers = fakeTimers();
+        watchInterfaces('127.0.0.1', [], {connect: async () => false, timers, onFound: () => {}});
+        assert.equal(timers.pending(), 0);
     });
 });

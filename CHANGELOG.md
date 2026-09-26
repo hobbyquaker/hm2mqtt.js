@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **An interface that does not answer at the start is picked up as soon as it does.** With `--interfaces auto` (the
+  addon's default) the ports were probed once at the start, and an interface process that was not up yet - hm2mqtt
+  started before it, or it was restarting - stayed out until hm2mqtt was restarted. The interfaces the start probe
+  missed are now probed again after 1, 2, 4 and 8 s, then every 15 s, and each one that answers is subscribed like the
+  others; that also picks up a LAN gateway added later. The local-mode detection on a loopback address waits for the
+  interface processes the same way, for up to two minutes, unless the CCU's usual ports answer there.
+- **A failed `init` is retried after 1, 2, 4 and 8 s, then every 15 s** (was 2, 4, 8, 16 s, then every 30 s).
+- **Waiting for an interface process that is still starting is no warning.** At the start, a port nobody listens on
+  yet is logged once as info (_"nothing is listening on 127.0.0.1:32010 yet - retrying in 1 s (then up to every
+  15 s)"_); a failed `init` after the interface was subscribed once, or any other error, is still a warning. An
+  interface process that calls back a subscription of hm2mqtt's previous run before this run subscribed again (it
+  remembers its clients across a restart) is logged as debug, not as _"call for unknown init id"_.
+- **binrpc 4.3**: its client no longer doubles its reconnect attempts while rfd refuses the connection; a failed
+  `init` over BIN-RPC connects afresh at the next attempt instead of waiting for the client's own reconnect timer.
+
 ## 3.6.2
 
 ### Changed

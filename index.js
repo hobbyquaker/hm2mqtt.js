@@ -15,7 +15,15 @@ import {Rega} from 'homematic-rega';
 import config from './config.js';
 import pkg from './package.json' with {type: 'json'};
 import {handle as handleInstall} from './lib/install.js';
-import {parseInterfaces, probeInterfaces, interfaceConfig, detectLocal, regaPort} from './lib/interfaces.js';
+import {
+    parseInterfaces,
+    probeInterfaces,
+    watchInterfaces,
+    interfaceConfig,
+    detectLocal,
+    regaPort,
+    INTERFACE_NAMES,
+} from './lib/interfaces.js';
 import {RpcServers, RpcConnection} from './lib/rpc.js';
 import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
@@ -69,6 +77,8 @@ const STOP_TIMEOUT_MS = 1500;
 const RESOLVE_RETRY_MS = 10000;
 /** how often an unreachable box is probed for the metadata api again (H-47) */
 const REDETECT_MS = 60000;
+/** how long the local-mode probe waits for the interface processes on a loopback address (B-1) */
+const LOCAL_WAIT_MS = 120000;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** the configured CCU address (the `ccu` field of every payload); connections use the resolved ip */
@@ -234,7 +244,16 @@ for (const pattern of listenPatterns) {
  */
 // an explicit --ccu-tls is a tunnel or a proxy by definition - local mode would silently drop the
 // TLS and the ports the user asked for, so it is never probed into, only chosen with --local
-const localMode = config.local === undefined ? !config.ccuTls && (await detectLocal(host)) : Boolean(config.local);
+// on a loopback address where nothing answers yet the interface processes may still be starting
+// (a boot, openccu-lite's early start): wait for them up to two minutes before deciding (B-1)
+const localMode =
+    config.local === undefined
+        ? !config.ccuTls &&
+          (await detectLocal(host, {
+              waitMs: LOCAL_WAIT_MS,
+              onWait: () => log.info('no interface process answers on', host, 'yet - waiting for them'),
+          }))
+        : Boolean(config.local);
 if (localMode) {
     log.info('local mode: BidCos over binrpc (32001/32000), hmipserver on 32010, ReGa on 8183');
 }
@@ -331,6 +350,8 @@ function publishTopic(topic, value, {retain = true, extra, ts, lc} = {}) {
 let indexTimer = null;
 
 let enabled = [];
+/** --interfaces auto: the interfaces the start probe missed, probed on until they answer (B-1) */
+let interfaceWatch = null;
 const connections = {};
 let servers = null;
 let regaOk = false;
@@ -995,10 +1016,16 @@ async function start() {
     } else if (regaSync) {
         regaSync.setHost(ccuIp);
     }
-    enabled =
-        parseInterfaces(config.interfaces) || (await probeInterfaces(ccuIp, {tls: config.ccuTls, local: localMode}));
+    const listed = parseInterfaces(config.interfaces);
+    enabled = listed || (await probeInterfaces(ccuIp, {tls: config.ccuTls, local: localMode}));
     if (enabled.length === 0) {
-        log.error('no interface found on', host, '- check --ccu-address / --interfaces');
+        // nothing answers yet: on the box itself the interface processes are still starting, which is
+        // no fault; the probe goes on (B-1)
+        (localMode ? log.info : log.warn)(
+            'no interface answers on',
+            host,
+            'yet - probing again' + (localMode ? '' : '; check --ccu-address / --interfaces if this stays'),
+        );
     }
     log.info('interfaces:', enabled.join(', ') || '(none)');
     // locally the CCU calls back over loopback, so nothing of ours needs to listen on the LAN
@@ -1009,6 +1036,7 @@ async function start() {
         xmlrpcPort: config.xmlrpcPort,
         binrpcPort: config.binrpcPort,
         log,
+        ownPrefix: `hm2mqtt_${config.name}_`,
     });
     for (const iface of enabled) {
         connections[iface] = createConnection(iface);
@@ -1022,6 +1050,13 @@ async function start() {
     await Promise.all(enabled.map((iface) => connections[iface].start()));
     updateConnected();
     adapter.publishInfo();
+    if (!listed) {
+        interfaceWatch = watchInterfaces(
+            ccuIp,
+            INTERFACE_NAMES.filter((iface) => !enabled.includes(iface)),
+            {tls: config.ccuTls, local: localMode, onFound: addInterface},
+        );
+    }
 
     timers.push(setInterval(publishCounters, COUNTER_INTERVAL_MS));
     if (config.dutyCycleInterval > 0) {
@@ -1031,7 +1066,25 @@ async function start() {
     timers.push(setInterval(() => values.save(), VALUES_SAVE_MS));
 }
 
+/** An interface the start probe missed answers now: subscribe to it like to the others (B-1). */
+function addInterface(iface) {
+    if (enabled.includes(iface)) {
+        return;
+    }
+    enabled = INTERFACE_NAMES.filter((name) => name === iface || enabled.includes(name));
+    log.info('interface', iface, 'answers now - interfaces:', enabled.join(', '));
+    connections[iface] = createConnection(iface);
+    publishItem(`interface/${iface}/connected`, false);
+    rebuildIndex();
+    updateConnected();
+    adapter.publishInfo();
+    connections[iface].start().catch((err) => log.warn('rpc', iface, 'start failed:', err.message));
+}
+
 async function shutdown() {
+    if (interfaceWatch) {
+        interfaceWatch.stop();
+    }
     for (const timer of timers) {
         clearInterval(timer);
     }

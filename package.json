@@ -67,7 +67,7 @@
     "serviceExtra": []
   },
   "dependencies": {
-    "binrpc": "^3.3.1",
+    "binrpc": "^4.3.0",
     "homematic-rega": "^2.0.0",
     "homematic-xmlrpc": "^2.0.0",
     "mqtt-interfaces-core": "^0.15.2"
