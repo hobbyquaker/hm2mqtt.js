@@ -18,6 +18,9 @@
   remembers its clients across a restart) is logged as debug, not as _"call for unknown init id"_.
 - **binrpc 4.3**: its client no longer doubles its reconnect attempts while rfd refuses the connection; a failed
   `init` over BIN-RPC connects afresh at the next attempt instead of waiting for the client's own reconnect timer.
+- **openccu-lite: the addon starts early at boot.** Its manifest declares the start before `rfd` and `hmipserver`
+  (`runtime.start: "early"`, `needs: ["rfd", "hmipserver"]`) beside `daemon: true`, so the system's Addons page shows it
+  as declared.
 
 ## 3.6.2
 

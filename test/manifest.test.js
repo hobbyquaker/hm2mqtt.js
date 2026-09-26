@@ -19,8 +19,11 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     assert.equal(manifest.release.github, 'hobbyquaker/hm2mqtt.js');
     assert.equal(manifest.release.asset, 'hm2mqtt-ccu-{arch}-{version}.tar.gz');
     assert.deepEqual(manifest.requires.architectures, ['armv7l', 'aarch64', 'x86_64']);
-    // the runtime block says only that the adapter keeps a process running (openccu-lite B-158): it
-    // needs nothing beyond its own directories, and the start order stays the platform's default
-    // (no needs) until a boot measurement says otherwise
-    assert.deepEqual(manifest.runtime, {daemon: true});
+    // the adapter keeps a process running (openccu-lite B-158) and needs nothing beyond its own
+    // directories; it talks to rfd and hmipserver and starts before them (D-75): a missing interface
+    // is re-probed and its init retried after 1, 2, 4, 8 s, then every 15 s, with info lines only
+    // (B-1, B-2, task 21)
+    const {note, ...runtime} = manifest.runtime;
+    assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early'});
+    assert.ok(note.de && note.en);
 });

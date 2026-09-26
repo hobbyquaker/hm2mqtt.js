@@ -276,9 +276,12 @@ configuration works on both, which is what a backup restored on the other kind o
 
 **Install and start.** On the system itself hm2mqtt is installed from the addon catalogue
 (_Addons → Catalogue_, the same package as on a CCU; its manifest `openccu-lite.json` ships in the
-package). Its unit starts after `rfd` and `hmipserver` — the addon declares no early start — so the
-interface probe at start finds them; the broker URL is the one setting to make, as on a CCU. The
-log is in the journal (`journalctl -u addon-hm2mqtt`).
+package). The addon declares the early start: its unit starts at boot before `rfd` and `hmipserver`,
+and hm2mqtt waits for them quietly — an interface that does not answer yet is probed and subscribed
+again after 1, 2, 4 and 8 s, then every 15 s, with one info line and no warning, and one that comes
+up later (or after a restart of its process) is picked up without a restart of hm2mqtt. The system
+can switch the early start off on its Addons page; the unit then starts after both. The broker URL
+is the one setting to make, as on a CCU. The log is in the journal (`journalctl -u addon-hm2mqtt`).
 
 Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
 a rename in the box's UI is in the topics about a second later, without a poll and without a

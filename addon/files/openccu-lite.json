@@ -16,6 +16,12 @@
     "architectures": ["armv7l", "aarch64", "x86_64"]
   },
   "runtime": {
-    "daemon": true
+    "daemon": true,
+    "needs": ["rfd", "hmipserver"],
+    "start": "early",
+    "note": {
+      "de": "Startet vor den Schnittstellenprozessen und verbindet sich, sobald sie antworten. Braucht nur seine eigenen Verzeichnisse; der MQTT-Broker ist ein ausgehender Anschluss, kein Port des Systems.",
+      "en": "Starts before the interface processes and connects as soon as they answer. Needs nothing beyond its own directories; the MQTT broker is an outgoing connection, no port of the system."
+    }
   }
 }
