@@ -76,6 +76,9 @@ the automatic detection.
 
 The addon packages are marked `-beta` until someone has confirmed an install on real hardware.
 
+On [openccu-lite](#openccu-lite) the same package is installed from the system's addon catalogue
+(_Addons → Catalogue_); there is nothing to download by hand.
+
 ## Finding the CCU
 
 ```
@@ -270,6 +273,12 @@ hm2mqtt works there without a changed configuration: at start (and again on reco
 names, rooms and functions from the box's **metadata API** instead of from the ReGa. A CCU3,
 RaspberryMatic or OpenCCU answers 404 there and everything stays exactly as before — the same
 configuration works on both, which is what a backup restored on the other kind of box needs.
+
+**Install and start.** On the system itself hm2mqtt is installed from the addon catalogue
+(_Addons → Catalogue_, the same package as on a CCU; its manifest `openccu-lite.json` ships in the
+package). Its unit starts after `rfd` and `hmipserver` — the addon declares no early start — so the
+interface probe at start finds them; the broker URL is the one setting to make, as on a CCU. The
+log is in the journal (`journalctl -u addon-hm2mqtt`).
 
 Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
 a rename in the box's UI is in the topics about a second later, without a poll and without a
