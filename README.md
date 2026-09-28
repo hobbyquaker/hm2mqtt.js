@@ -284,7 +284,10 @@ can switch the early start off on its Addons page; the unit then starts after bo
 is the one setting to make, as on a CCU. The log is in the journal and nowhere else — no
 `var/hm2mqtt.log` on the SD card: `journalctl -u addon-hm2mqtt`, the system's _Log_ page
 (`/system/log?unit=addon-hm2mqtt`), and the settings page's log view, which reads it with the
-addon's own API token (the manifest asks for `logs:read`).
+addon's own API token (the manifest asks for `logs:read`). The system opens the settings page
+without `?sid=`: the page and its CGIs take the session from the system's `X-Occulite-Session`
+header and confirm it with the system (the manifest declares `ui.session_header`); `?sid=` keeps
+working for a CCU and for an openccu-lite image from before the header.
 
 Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
 a rename in the box's UI is in the topics about a second later, without a poll and without a

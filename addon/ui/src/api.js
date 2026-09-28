@@ -1,6 +1,9 @@
 /**
  * Calls to the addon's CGIs. Every request carries the WebUI session id from the page URL -
- * settings.cgi only serves this page with a valid one, and each CGI checks it again.
+ * settings.cgi only serves this page with a valid one, and each CGI checks it again. On
+ * openccu-lite the system opens the page without ?sid= (the manifest declares
+ * ui.session_header): the calls are same-origin, the system's gate adds the session header, and
+ * no empty sid= is sent.
  */
 
 const sid = new URLSearchParams(location.search).get('sid') || '';
@@ -9,8 +12,8 @@ const sid = new URLSearchParams(location.search).get('sid') || '';
  * @param {object} [params]
  * @returns {string}
  */
-function query(params = {}) {
-    const search = new URLSearchParams({sid});
+export function query(params = {}) {
+    const search = new URLSearchParams(sid ? {sid} : {});
     for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== null && value !== '') {
             search.set(key, String(value));

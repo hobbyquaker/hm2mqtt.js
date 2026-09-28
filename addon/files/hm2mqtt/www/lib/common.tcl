@@ -36,42 +36,6 @@ if {[info exists env(HM2MQTT_RC_SCRIPT)]} {
     set RC_SCRIPT $env(HM2MQTT_RC_SCRIPT)
 }
 
-# openccu-lite: a LITE= line in /VERSION, or occulited - the rule of rc.d/hm2mqtt, RedMatic and the
-# addon handbook. Read at every call, never remembered: the same /usr/local may move between a CCU
-# and openccu-lite. HM2MQTT_VERSION_FILE and HM2MQTT_OCCULITED let the tests point elsewhere; a
-# CGI's environment on a box never carries them (a client's headers arrive as HTTP_*).
-proc is_openccu_lite {} {
-    global env
-    set versionFile /VERSION
-    set occulited /usr/bin/occulited
-    if {[info exists env(HM2MQTT_VERSION_FILE)]} {
-        set versionFile $env(HM2MQTT_VERSION_FILE)
-    }
-    if {[info exists env(HM2MQTT_OCCULITED)]} {
-        set occulited $env(HM2MQTT_OCCULITED)
-    }
-    if {![catch {open $versionFile r} fp]} {
-        set version [read $fp]
-        close $fp
-        if {[regexp -line {^LITE=} $version]} {
-            return 1
-        }
-    }
-    return [file exists $occulited]
-}
-
-# Where the system answers: its own lighttpd on the loopback, which proxies /api/ to occulited.
-# HM2MQTT_OCCULITE_URL replaces the base for the tests.
-proc occulite_base_url {} {
-    global env
-    set base http://127.0.0.1
-    if {[info exists env(HM2MQTT_OCCULITE_URL)]} {
-        set base $env(HM2MQTT_OCCULITE_URL)
-    }
-    regsub {/$} $base "" base
-    return $base
-}
-
 # Task 17: on openccu-lite hm2mqtt logs to the journal as the unit addon-hm2mqtt, and the settings
 # page reads it through the system's log route with the addon's own token - the manifest asks for
 # `logs:read` (runtime.api_scopes), and the system writes the token to
@@ -227,8 +191,8 @@ proc node_env {} {
     }
 }
 
-# Answers with a JSON error and exits unless the request carries a valid WebUI session. Returns the
-# query parameters as a name/value list.
+# Answers with a JSON error and exits unless the request carries a valid session: openccu-lite's
+# session header, or a WebUI ?sid= (task 20). Returns the query parameters as a name/value list.
 proc require_session {} {
     set params [query_params]
     array set query $params
@@ -236,7 +200,7 @@ proc require_session {} {
     if {[info exists query(sid)]} {
         set sid $query(sid)
     }
-    if {![check_session $sid]} {
+    if {![request_session_ok $sid]} {
         json_header
         puts "{\"error\":\"invalid session\"}"
         exit 1

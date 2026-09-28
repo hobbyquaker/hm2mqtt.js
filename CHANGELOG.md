@@ -9,6 +9,11 @@
   `addon-hm2mqtt` (`journalctl -u addon-hm2mqtt`, the system's Log page), and an old file pair is removed at the
   first start. The settings page's log view reads the same lines through the system's log route with the addon's own
   API token; the manifest asks for `logs:read` for that. On a CCU3 and OpenCCU nothing changes.
+- **openccu-lite: the settings page opens without `?sid=`.** The page and its CGIs take the session the system's gate
+  sends as `X-Occulite-Session` and confirm it with the system (`/api/auth/v1/state`, a live session only, no API
+  token); the manifest declares `ui.session_header`, so the system stops putting its legacy session alias into the
+  page's address. `?sid=` works as before on a CCU, OpenCCU and an openccu-lite image without the header; on a CCU the
+  header is never read.
 
 ## 3.7.0
 

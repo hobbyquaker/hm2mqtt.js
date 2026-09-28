@@ -1,6 +1,8 @@
 #!/bin/tclsh
 #
-# The page behind the hm2mqtt button in Systemsteuerung: checks the session, then serves the UI.
+# The page behind the hm2mqtt button in Systemsteuerung: checks the session, then serves the UI. On
+# openccu-lite the system opens it without ?sid= and its gate sends the session as a header (task 20,
+# lib/session.tcl).
 
 source [file join [file dirname [info script]] lib common.tcl]
 
@@ -12,7 +14,7 @@ if {[info exists params(sid)]} {
 
 puts "Content-Type: text/html; charset=utf-8\r\n"
 
-if {[check_session $sid]} {
+if {[request_session_ok $sid]} {
     set fd [open $ADDON_DIR/www/index.html r]
     puts -nonewline [read $fd]
     close $fd

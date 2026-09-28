@@ -15,6 +15,9 @@
   "requires": {
     "architectures": ["armv7l", "aarch64", "x86_64"]
   },
+  "ui": {
+    "session_header": true
+  },
   "runtime": {
     "daemon": true,
     "needs": ["rfd", "hmipserver"],

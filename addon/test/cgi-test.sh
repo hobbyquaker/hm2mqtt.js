@@ -264,6 +264,17 @@ const server = createServer((req, res) => {
             {time: 'Sep 28 23:55:01', tag: 'addon-hm2mqtt', pid: 4711, unit: 'addon-hm2mqtt', message: 'mqtt connected to "broker"'},
             {time: 'Sep 28 23:55:02', tag: 'hm2mqtt', message: 'journal line two [ok]'},
         ]}));
+    } else if (req.url === '/api/auth/v1/state') {
+        // the session header (task 20): LIVE is a session, NOSID a token (no sid), OTHER names
+        // another session, anything else is not known
+        const id = (req.headers.authorization || '').replace(/^Bearer /, '');
+        const answers = {
+            LIVESESSIONLIVESESSIONLI22: {authenticated: true, sid: 'LIVESESSIONLIVESESSIONLI22', user: 'u', role: 'user'},
+            NOSIDNOSIDNOSIDNOSIDNOSI22: {authenticated: true, user: 'token', role: 'admin'},
+            OTHERSESSIONOTHERSESSION22: {authenticated: true, sid: 'SOMEONEELSESOMEONEELSES22', user: 'x'},
+        };
+        res.writeHead(answers[id] ? 200 : 401, {'Content-Type': 'application/json'});
+        res.end(JSON.stringify(answers[id] || {authenticated: false}));
     } else if (req.headers.authorization === 'Bearer olt_brokenanswer00') {
         res.writeHead(200, {'Content-Type': 'application/json'});
         res.end('{"lines": [');
@@ -365,6 +376,104 @@ case "$out" in
     *'line two'*) pass "a CCU (no LITE= line, no occulited) still shows the file" ;;
     *) fail "a CCU (no LITE= line, no occulited) still shows the file" "$out" ;;
 esac
+
+echo "the openccu-lite session header (task 20)"
+# The gate sends the session it accepted as HTTP_X_OCCULITE_SESSION; the CGI asks the system's
+# GET /api/auth/v1/state about it (the stub above). ReGa refuses every ?sid= in this section unless
+# a case says otherwise, so only the header can let a request in.
+LIVE=LIVESESSIONLIVESESSIONLI22
+# hdr <script> <query> <header> [<VERSION file>] [<HM2MQTT_TEST_SESSION>]: a CGI with the header
+hdr() {
+    (cd "$TREE/www" && QUERY_STRING="$2" HTTP_X_OCCULITE_SESSION="$3" HM2MQTT_VERSION_FILE="${4:-$TMP/VERSION.lite}" \
+        HM2MQTT_OCCULITE_URL="$LOG_STUB_URL" HM2MQTT_TEST_SESSION="${5:-invalid}" tclsh "$STUB" "$1" 2>&1)
+}
+state_asked() { grep -c "^GET /api/auth/v1/state Bearer $1\$" "$LOG_STUB_REQUESTS"; }
+: > "$LOG_STUB_REQUESTS"
+out="$(hdr settings.cgi '' "$LIVE")"
+case "$out" in
+    *'<h1>UI</h1>'*) pass "settings.cgi serves the UI with the header and no ?sid=" ;;
+    *) fail "settings.cgi serves the UI with the header and no ?sid=" "$out" ;;
+esac
+[ "$(state_asked "$LIVE")" = 1 ] && pass "  after asking the system once, with the id as Bearer" || fail "  after asking the system once, with the id as Bearer" "$(cat "$LOG_STUB_REQUESTS")"
+out="$(hdr getconfig.cgi '' "$LIVE")"
+case "$out" in
+    *'"HM2MQTT_NAME"'*) pass "getconfig.cgi answers the header" ;;
+    *) fail "getconfig.cgi answers the header" "$out" ;;
+esac
+out="$(hdr service.cgi 'cmd=restart' "$LIVE")"
+case "$out" in
+    *'rc.d called with restart'*) pass "service.cgi too" ;;
+    *) fail "service.cgi too" "$out" ;;
+esac
+if tclsh <<<'package require json' >/dev/null 2>&1; then
+    out="$(HM2MQTT_API_TOKEN_FILE="$TMP/hm2mqtt.api" hdr log.cgi 'lines=5' "$LIVE")"
+    case "$out" in
+        *'journal line two'*) pass "and log.cgi" ;;
+        *) fail "and log.cgi" "$out" ;;
+    esac
+fi
+for case in "NOSIDNOSIDNOSIDNOSIDNOSI22:an API token (the state names no sid)" \
+    "OTHERSESSIONOTHERSESSION22:a state that names another session" \
+    "UNKNOWNUNKNOWNUNKNOWNUNK22:a session the system does not know"; do
+    id="${case%%:*}"
+    what="${case#*:}"
+    : > "$LOG_STUB_REQUESTS"
+    out="$(hdr getconfig.cgi '' "$id")"
+    case "$out" in
+        *'"error":"invalid session"'*) pass "$what is refused" ;;
+        *) fail "$what is refused" "$out" ;;
+    esac
+    [ "$(state_asked "$id")" = 1 ] && pass "  after one question" || fail "  after one question" "$(cat "$LOG_STUB_REQUESTS")"
+done
+for case in "@$LIVE@:an @-wrapped id" "$LIVE $LIVE:two ids" "$LIVE
+x:a line break" "$LIVE:x:a colon"; do
+    id="${case%:*}"
+    what="${case##*:}"
+    : > "$LOG_STUB_REQUESTS"
+    out="$(hdr settings.cgi '' "$id")"
+    case "$out" in
+        *'Sitzung ungültig'*) pass "$what in the header is refused" ;;
+        *) fail "$what in the header is refused" "$out" ;;
+    esac
+    if [ -s "$LOG_STUB_REQUESTS" ]; then
+        fail "  without asking the system" "$(cat "$LOG_STUB_REQUESTS")"
+    else
+        pass "  without asking the system"
+    fi
+done
+out="$(hdr getconfig.cgi 'sid=@1234567890@' "UNKNOWNUNKNOWNUNKNOWNUNK22" "$TMP/VERSION.lite" valid)"
+case "$out" in
+    *'"error":"invalid session"'*) pass "a header the system refuses decides: a ?sid= ReGa confirms next to it does not lift it" ;;
+    *) fail "a header the system refuses decides: a ?sid= ReGa confirms next to it does not lift it" "$out" ;;
+esac
+out="$(hdr getconfig.cgi 'sid=@1234567890@' '' "$TMP/VERSION.lite" valid)"
+case "$out" in
+    *'"HM2MQTT_NAME"'*) pass "no header on openccu-lite: ?sid= through the tclrega shim as before" ;;
+    *) fail "no header on openccu-lite: ?sid= through the tclrega shim as before" "$out" ;;
+esac
+: > "$LOG_STUB_REQUESTS"
+out="$(hdr settings.cgi '' "$LIVE" "$TMP/VERSION.ccu")"
+case "$out" in
+    *'Sitzung ungültig'*) pass "a CCU ignores the header (a client may have sent it): no ?sid=, no page" ;;
+    *) fail "a CCU ignores the header (a client may have sent it): no ?sid=, no page" "$out" ;;
+esac
+if [ -s "$LOG_STUB_REQUESTS" ]; then
+    fail "  and asks nobody" "$(cat "$LOG_STUB_REQUESTS")"
+else
+    pass "  and asks nobody"
+fi
+out="$(hdr settings.cgi 'sid=@1234567890@' "UNKNOWNUNKNOWNUNKNOWNUNK22" "$TMP/VERSION.ccu" valid)"
+case "$out" in
+    *'<h1>UI</h1>'*) pass "  while ?sid= works there as before, whatever the header says" ;;
+    *) fail "  while ?sid= works there as before, whatever the header says" "$out" ;;
+esac
+out="$(cd "$TREE/www" && QUERY_STRING='' HTTP_X_OCCULITE_SESSION="$LIVE" HM2MQTT_VERSION_FILE="$TMP/VERSION.ccu" \
+    HM2MQTT_OCCULITED="$TREE/bin/node" HM2MQTT_OCCULITE_URL="$LOG_STUB_URL" HM2MQTT_TEST_SESSION=invalid tclsh "$STUB" settings.cgi 2>&1)"
+case "$out" in
+    *'<h1>UI</h1>'*) pass "occulited alone (no LITE= line) is openccu-lite: the header counts" ;;
+    *) fail "occulited alone (no LITE= line) is openccu-lite: the header counts" "$out" ;;
+esac
+
 kill "$LOG_STUB_PID" 2>/dev/null
 wait "$LOG_STUB_PID" 2>/dev/null
 

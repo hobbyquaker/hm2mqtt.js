@@ -27,4 +27,7 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     const {note, ...runtime} = manifest.runtime;
     assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early', api_scopes: ['logs:read']});
     assert.ok(note.de && note.en);
+    // the settings page and every CGI read openccu-lite's session header (task 20), so the system
+    // opens the page without appending ?sid=
+    assert.deepEqual(manifest.ui, {session_header: true});
 });
