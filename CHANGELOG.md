@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **openccu-lite: the addon logs to the journal only.** hm2mqtt's output went to `var/hm2mqtt.log` (and `.1`) in the
+  addon directory, on the SD card, as on a CCU. On openccu-lite it now goes to the journal as the unit
+  `addon-hm2mqtt` (`journalctl -u addon-hm2mqtt`, the system's Log page), and an old file pair is removed at the
+  first start. The settings page's log view reads the same lines through the system's log route with the addon's own
+  API token; the manifest asks for `logs:read` for that. On a CCU3 and OpenCCU nothing changes.
+
 ## 3.7.0
 
 ### Changed

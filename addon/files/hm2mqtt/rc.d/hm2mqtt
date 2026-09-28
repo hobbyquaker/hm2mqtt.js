@@ -22,11 +22,34 @@ else
 fi
 LOG=$ADDON_DIR/var/hm2mqtt.log
 LOG_MAX=1048576
+# Task 17 (openccu-lite D-59): on openccu-lite everything logs to the journal and no addon writes a
+# log file onto the SD card. hm2mqtt's output goes to journald under the unit's identifier, so
+# `journalctl -u addon-hm2mqtt`, the settings page and the system's Log page find it.
+JOURNAL_TAG=addon-$ADDON
 
 [ -f $ADDON_DIR/versions ] && . $ADDON_DIR/versions
 
 # ICU keeps its data outside the libraries; without this node does not start (musl build)
 [ -n "$NODE_ICU_DATA" ] && export ICU_DATA="$NODE_ICU_DATA"
+
+# openccu-lite: a LITE= line in /VERSION, or occulited - the rule RedMatic, the addon handbook and
+# this addon's CGIs use. Read at every start, never remembered: the same /usr/local may move between
+# a CCU and openccu-lite.
+IsLite() {
+    grep -q '^LITE=' /VERSION 2>/dev/null || [ -x /usr/bin/occulited ]
+}
+
+# Where hm2mqtt's output goes: "journal" on openccu-lite, the file everywhere else. It cannot simply
+# be left to the unit: start-stop-daemon -b points the daemon's stdio at /dev/null. systemd-cat
+# connects stdout and stderr to journald and execs node, so the recorded pid stays node's own.
+# Without systemd-cat the file stays, rather than no log at all.
+LogTarget() {
+    if IsLite && command -v systemd-cat >/dev/null 2>&1; then
+        echo journal
+    else
+        echo file
+    fi
+}
 
 Running() {
     [ -f $PIDFILE ] || return 1
@@ -68,14 +91,25 @@ Start() {
     fi
 
     mkdir -p $ADDON_DIR/var $ADDON_DIR/var/cache
-    if [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt $LOG_MAX ]; then
-        mv $LOG $LOG.1
+    if [ "$(LogTarget)" = journal ]; then
+        # the file an earlier version wrote, or this /usr/local on a CCU: nothing writes it any more,
+        # so it goes - once, since there is nothing left to remove at the next start
+        if [ -e $LOG ] || [ -e $LOG.1 ]; then
+            rm -f $LOG $LOG.1 2>/dev/null
+            logger -t $ADDON -p daemon.info "openccu-lite: the log is the journal now (journalctl -u $JOURNAL_TAG); removed $LOG"
+        fi
+        RUN="exec systemd-cat -t $JOURNAL_TAG $NODE $APP"
+    else
+        if [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt $LOG_MAX ]; then
+            mv $LOG $LOG.1
+        fi
+        RUN="exec $NODE $APP >>$LOG 2>&1"
     fi
 
     echo -n "Starting $ADDON: "
     logger -t $ADDON -p daemon.info "starting hm2mqtt $VERSION_ADDON (node $NODE_VERSION)"
-    # sh -c "exec ..." so the recorded pid is node's own, not a wrapper's
-    start-stop-daemon -S -b -m -p $PIDFILE -x /bin/sh -- -c "exec $NODE $APP >>$LOG 2>&1"
+    # sh -c "exec ..." so the recorded pid is node's own, not a wrapper's (systemd-cat execs too)
+    start-stop-daemon -S -b -m -p $PIDFILE -x /bin/sh -- -c "$RUN"
     echo "OK"
 }
 

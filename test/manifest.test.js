@@ -22,8 +22,9 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     // the adapter keeps a process running (openccu-lite B-158) and needs nothing beyond its own
     // directories; it talks to rfd and hmipserver and starts before them (D-75): a missing interface
     // is re-probed and its init retried after 1, 2, 4, 8 s, then every 15 s, with info lines only
-    // (B-1, B-2, task 21)
+    // (B-1, B-2, task 21); its own API token reads the journal for the settings page's log view
+    // (task 17) and nothing else
     const {note, ...runtime} = manifest.runtime;
-    assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early'});
+    assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early', api_scopes: ['logs:read']});
     assert.ok(note.de && note.en);
 });

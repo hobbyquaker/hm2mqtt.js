@@ -36,6 +36,112 @@ if {[info exists env(HM2MQTT_RC_SCRIPT)]} {
     set RC_SCRIPT $env(HM2MQTT_RC_SCRIPT)
 }
 
+# openccu-lite: a LITE= line in /VERSION, or occulited - the rule of rc.d/hm2mqtt, RedMatic and the
+# addon handbook. Read at every call, never remembered: the same /usr/local may move between a CCU
+# and openccu-lite. HM2MQTT_VERSION_FILE and HM2MQTT_OCCULITED let the tests point elsewhere; a
+# CGI's environment on a box never carries them (a client's headers arrive as HTTP_*).
+proc is_openccu_lite {} {
+    global env
+    set versionFile /VERSION
+    set occulited /usr/bin/occulited
+    if {[info exists env(HM2MQTT_VERSION_FILE)]} {
+        set versionFile $env(HM2MQTT_VERSION_FILE)
+    }
+    if {[info exists env(HM2MQTT_OCCULITED)]} {
+        set occulited $env(HM2MQTT_OCCULITED)
+    }
+    if {![catch {open $versionFile r} fp]} {
+        set version [read $fp]
+        close $fp
+        if {[regexp -line {^LITE=} $version]} {
+            return 1
+        }
+    }
+    return [file exists $occulited]
+}
+
+# Where the system answers: its own lighttpd on the loopback, which proxies /api/ to occulited.
+# HM2MQTT_OCCULITE_URL replaces the base for the tests.
+proc occulite_base_url {} {
+    global env
+    set base http://127.0.0.1
+    if {[info exists env(HM2MQTT_OCCULITE_URL)]} {
+        set base $env(HM2MQTT_OCCULITE_URL)
+    }
+    regsub {/$} $base "" base
+    return $base
+}
+
+# Task 17: on openccu-lite hm2mqtt logs to the journal as the unit addon-hm2mqtt, and the settings
+# page reads it through the system's log route with the addon's own token - the manifest asks for
+# `logs:read` (runtime.api_scopes), and the system writes the token to
+# /run/occulite/addon-tokens/hm2mqtt.api at every start. The system's Log page shows the same
+# lines with every filter.
+set JOURNAL_UNIT addon-hm2mqtt
+set LOG_PAGE /system/log?unit=addon-hm2mqtt
+set API_TOKEN_FILE /run/occulite/addon-tokens/hm2mqtt.api
+if {[info exists env(HM2MQTT_API_TOKEN_FILE)]} {
+    set API_TOKEN_FILE $env(HM2MQTT_API_TOKEN_FILE)
+}
+
+# The last `count` lines of the unit's journal as text, one entry per line ("<time> <tag>[<pid>]:
+# <message>"), or an error: a list {ok text} or {error reason}. openccu-lite only (Tcl 8.6 with
+# tcllib there); never called on a CCU, whose Tcl 8.2 has no json package.
+proc journal_log {count} {
+    global API_TOKEN_FILE JOURNAL_UNIT
+    if {[catch {open $API_TOKEN_FILE r} fd]} {
+        return [list error "no API token for the addon ($API_TOKEN_FILE)"]
+    }
+    set token [string trim [read $fd]]
+    close $fd
+    if {![regexp {^[A-Za-z0-9_.-]+$} $token]} {
+        return [list error "no API token for the addon ($API_TOKEN_FILE)"]
+    }
+    if {[catch {package require http}] || [catch {package require json}]} {
+        return [list error "the Tcl packages http and json are missing"]
+    }
+    set url "[occulite_base_url]/api/system/v1/log?unit=$JOURNAL_UNIT&limit=$count"
+    if {[catch {http::geturl $url -headers [list Authorization "Bearer $token"] -timeout 10000} request]} {
+        return [list error "the system did not answer ($request)"]
+    }
+    set status [http::status $request]
+    set code [http::ncode $request]
+    set body [http::data $request]
+    http::cleanup $request
+    if {![string equal $status "ok"] || $code != 200} {
+        return [list error "the system answered $code"]
+    }
+    # json2dict's answer is an even list, so `array set` takes it apart without the dict command
+    if {[catch {json::json2dict $body} answer] || [catch {array set reply $answer}] || ![info exists reply(lines)]} {
+        return [list error "the system's answer could not be read"]
+    }
+    set out [list]
+    foreach line $reply(lines) {
+        catch {unset entry}
+        if {[catch {array set entry $line}]} {
+            continue
+        }
+        set text ""
+        if {[info exists entry(time)]} {
+            append text "$entry(time) "
+        }
+        if {[info exists entry(tag)]} {
+            append text $entry(tag)
+        }
+        if {[info exists entry(pid)]} {
+            append text "\[$entry(pid)\]"
+        }
+        if {[info exists entry(message)]} {
+            append text ": $entry(message)"
+        }
+        lappend out $text
+    }
+    if {[info exists reply(error)]} {
+        return [list error "the system could not read the journal ($reply(error))"]
+    }
+    return [list ok [join $out "\n"]]
+}
+
 proc json_header {} {
     puts "Content-Type: application/json; charset=utf-8\r\n"
 }

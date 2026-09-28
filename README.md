@@ -281,7 +281,10 @@ and hm2mqtt waits for them quietly — an interface that does not answer yet is 
 again after 1, 2, 4 and 8 s, then every 15 s, with one info line and no warning, and one that comes
 up later (or after a restart of its process) is picked up without a restart of hm2mqtt. The system
 can switch the early start off on its Addons page; the unit then starts after both. The broker URL
-is the one setting to make, as on a CCU. The log is in the journal (`journalctl -u addon-hm2mqtt`).
+is the one setting to make, as on a CCU. The log is in the journal and nowhere else — no
+`var/hm2mqtt.log` on the SD card: `journalctl -u addon-hm2mqtt`, the system's _Log_ page
+(`/system/log?unit=addon-hm2mqtt`), and the settings page's log view, which reads it with the
+addon's own API token (the manifest asks for `logs:read`).
 
 Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
 a rename in the box's UI is in the topics about a second later, without a poll and without a

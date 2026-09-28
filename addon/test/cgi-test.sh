@@ -36,6 +36,12 @@ ln -sf "$(command -v node)" "$TREE/bin/node"
 printf '{"ABC1234567:1": "Wohnzimmer Licht"}\n' > "$TREE/etc/names.json"
 
 export HM2MQTT_ADDON_DIR="$TREE"
+# a CCU unless a case says otherwise: no LITE= line, no occulited (the test host's own /VERSION and
+# /usr/bin are never looked at)
+printf 'VERSION=3.87.6\nPRODUCT=ccu3\n' > "$TMP/VERSION.ccu"
+printf 'VERSION=3.89.11\nPRODUCT=ova\nVARIANT=lite\nLITE=1.0.0-dev.30\n' > "$TMP/VERSION.lite"
+export HM2MQTT_VERSION_FILE="$TMP/VERSION.ccu"
+export HM2MQTT_OCCULITED="$TMP/no-occulited"
 export HM2MQTT_PID_FILE="$TMP/hm2mqtt.pid"
 export HM2MQTT_RC_SCRIPT="$TMP/rc.d-hm2mqtt"
 printf '#!/bin/sh\necho "rc.d called with $1"\n' > "$HM2MQTT_RC_SCRIPT"
@@ -239,6 +245,158 @@ out="$(cgi log.cgi 'sid=@1234567890@')"
 case "$out" in
     *'line two'*) pass "returns the log" ;;
     *) fail "returns the log" "$out" ;;
+esac
+
+echo "log.cgi on openccu-lite: the journal through the system's log route (task 17)"
+# A stub of the system's GET /api/system/v1/log: it answers the addon's token with two journal
+# lines of the unit, anything else with 401, and records what it was asked.
+LOG_STUB_REQUESTS="$TMP/log-stub.requests"
+LOG_STUB_PORT="$TMP/log-stub.port"
+cat > "$TMP/log-stub.mjs" <<'STUB'
+import {createServer} from 'node:http';
+import {appendFileSync, writeFileSync} from 'node:fs';
+const [requests, portFile] = process.argv.slice(2);
+const server = createServer((req, res) => {
+    appendFileSync(requests, `${req.method} ${req.url} ${req.headers.authorization || '-'}\n`);
+    if (req.headers.authorization === 'Bearer olt_addontoken0123') {
+        res.writeHead(200, {'Content-Type': 'application/json'});
+        res.end(JSON.stringify({source: 'journald', lines: [
+            {time: 'Sep 28 23:55:01', tag: 'addon-hm2mqtt', pid: 4711, unit: 'addon-hm2mqtt', message: 'mqtt connected to "broker"'},
+            {time: 'Sep 28 23:55:02', tag: 'hm2mqtt', message: 'journal line two [ok]'},
+        ]}));
+    } else if (req.headers.authorization === 'Bearer olt_brokenanswer00') {
+        res.writeHead(200, {'Content-Type': 'application/json'});
+        res.end('{"lines": [');
+    } else {
+        res.writeHead(401, {'Content-Type': 'application/json'});
+        res.end('{"error":"unauthorized"}');
+    }
+});
+server.listen(0, '127.0.0.1', () => writeFileSync(portFile, String(server.address().port)));
+STUB
+: > "$LOG_STUB_REQUESTS"
+node "$TMP/log-stub.mjs" "$LOG_STUB_REQUESTS" "$LOG_STUB_PORT" &
+LOG_STUB_PID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -s "$LOG_STUB_PORT" ] && break
+    sleep 0.3
+done
+LOG_STUB_URL="http://127.0.0.1:$(cat "$LOG_STUB_PORT" 2>/dev/null || echo 1)"
+printf 'olt_addontoken0123\n' > "$TMP/hm2mqtt.api"
+# lite_log <VERSION file> <occulited path> <token file> [<query>]: log.cgi on openccu-lite
+lite_log() {
+    (cd "$TREE/www" && QUERY_STRING="${4:-sid=@1234567890@}" HM2MQTT_VERSION_FILE="$1" HM2MQTT_OCCULITED="$2" \
+        HM2MQTT_API_TOKEN_FILE="$3" HM2MQTT_OCCULITE_URL="$LOG_STUB_URL" tclsh "$STUB" log.cgi 2>&1)
+}
+if tclsh <<<'package require json' >/dev/null 2>&1; then
+    out="$(lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/hm2mqtt.api" 'sid=@1234567890@&lines=50')"
+    case "$out" in
+        *'Sep 28 23:55:01 addon-hm2mqtt[4711]: mqtt connected to "broker"'*'Sep 28 23:55:02 hm2mqtt: journal line two [ok]'*) pass "a LITE= line: the journal's lines, one per entry" ;;
+        *) fail "a LITE= line: the journal's lines, one per entry" "$out" ;;
+    esac
+    case "$out" in
+        *'line two'*'line one'* | *'line one'*) fail "  and not the file" "$out" ;;
+        *) pass "  and not the file" ;;
+    esac
+    if [ "$(cat "$LOG_STUB_REQUESTS")" = 'GET /api/system/v1/log?unit=addon-hm2mqtt&limit=50 Bearer olt_addontoken0123' ]; then
+        pass "  asked for the unit's last lines with the addon's own token"
+    else
+        fail "  asked for the unit's last lines with the addon's own token" "$(cat "$LOG_STUB_REQUESTS")"
+    fi
+    : > "$LOG_STUB_REQUESTS"
+    out="$(lite_log "$TMP/VERSION.ccu" "$TREE/bin/node" "$TMP/hm2mqtt.api")"
+    case "$out" in
+        *'journal line two'*) pass "occulited alone (no LITE= line) is openccu-lite too" ;;
+        *) fail "occulited alone (no LITE= line) is openccu-lite too" "$out" ;;
+    esac
+    case "$(cat "$LOG_STUB_REQUESTS")" in
+        *'limit=200 '*) pass "  with the default of 200 lines" ;;
+        *) fail "  with the default of 200 lines" "$(cat "$LOG_STUB_REQUESTS")" ;;
+    esac
+    : > "$LOG_STUB_REQUESTS"
+    out="$(lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/no-token")"
+    case "$out" in
+        *'no API token'*'/system/log?unit=addon-hm2mqtt'*) pass "no token: says so and names the system's Log page" ;;
+        *) fail "no token: says so and names the system's Log page" "$out" ;;
+    esac
+    case "$out" in
+        *'line one'*) fail "  and shows no file" "$out" ;;
+        *) pass "  and shows no file" ;;
+    esac
+    if [ -s "$LOG_STUB_REQUESTS" ]; then
+        fail "  without asking the system" "$(cat "$LOG_STUB_REQUESTS")"
+    else
+        pass "  without asking the system"
+    fi
+    printf 'olt_wrongtoken0000\n' > "$TMP/wrong.api"
+    out="$(lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/wrong.api")"
+    case "$out" in
+        *'answered 401'*'/system/log?unit=addon-hm2mqtt'*) pass "a token the system refuses: the status and the Log page" ;;
+        *) fail "a token the system refuses: the status and the Log page" "$out" ;;
+    esac
+    printf 'olt_brokenanswer00\n' > "$TMP/broken.api"
+    out="$(lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/broken.api")"
+    case "$out" in
+        *'could not be read'*) pass "an answer that is no JSON: said so" ;;
+        *) fail "an answer that is no JSON: said so" "$out" ;;
+    esac
+    printf 'olt_x\nOTHER: header\n' > "$TMP/odd.api"
+    : > "$LOG_STUB_REQUESTS"
+    out="$(lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/odd.api")"
+    case "$out" in
+        *'no API token'*) pass "a token file with more than a token is not sent" ;;
+        *) fail "a token file with more than a token is not sent" "$out" ;;
+    esac
+    out="$(HM2MQTT_TEST_SESSION=invalid lite_log "$TMP/VERSION.lite" "$TMP/no-occulited" "$TMP/hm2mqtt.api")"
+    case "$out" in
+        *'invalid session'*) pass "without a session nothing is read" ;;
+        *) fail "without a session nothing is read" "$out" ;;
+    esac
+    if [ -s "$LOG_STUB_REQUESTS" ]; then
+        fail "  and the system is not asked" "$(cat "$LOG_STUB_REQUESTS")"
+    else
+        pass "  and the system is not asked"
+    fi
+else
+    skip "log.cgi on openccu-lite" "tclsh has no json package (tcllib)"
+fi
+out="$(lite_log "$TMP/VERSION.ccu" "$TMP/no-occulited" "$TMP/hm2mqtt.api")"
+case "$out" in
+    *'line two'*) pass "a CCU (no LITE= line, no occulited) still shows the file" ;;
+    *) fail "a CCU (no LITE= line, no occulited) still shows the file" "$out" ;;
+esac
+kill "$LOG_STUB_PID" 2>/dev/null
+wait "$LOG_STUB_PID" 2>/dev/null
+
+echo "rc.d/hm2mqtt: where the output goes (task 17)"
+# IsLite and LogTarget as shipped, with /VERSION and /usr/bin/occulited pointed at test files
+RC_FUNCS="$TMP/rc-funcs.sh"
+sed -n '/^IsLite() {$/,/^}$/p; /^LogTarget() {$/,/^}$/p' addon/files/hm2mqtt/rc.d/hm2mqtt > "$RC_FUNCS"
+# log_target <VERSION file> <occulited path> <with systemd-cat: 1|0>
+log_target() {
+    funcs="$(sed -e "s|/VERSION|$1|" -e "s|/usr/bin/occulited|$2|" "$RC_FUNCS")"
+    if [ "$3" = 1 ]; then
+        sh -c "command() { [ \"\$2\" = systemd-cat ] && return 0; builtin command \"\$@\"; }; $funcs
+LogTarget"
+    else
+        sh -c "command() { [ \"\$2\" = systemd-cat ] && return 1; builtin command \"\$@\"; }; $funcs
+LogTarget"
+    fi
+}
+if [ "$(grep -c '^IsLite() {$\|^LogTarget() {$' "$RC_FUNCS")" = 2 ]; then
+    pass "IsLite and LogTarget could be taken out of rc.d/hm2mqtt"
+else
+    fail "IsLite and LogTarget could be taken out of rc.d/hm2mqtt" "$(cat "$RC_FUNCS")"
+fi
+[ "$(log_target "$TMP/VERSION.lite" "$TMP/no-occulited" 1)" = journal ] && pass "a LITE= line with systemd-cat: the journal" || fail "a LITE= line with systemd-cat: the journal" "$(log_target "$TMP/VERSION.lite" "$TMP/no-occulited" 1)"
+[ "$(log_target "$TMP/VERSION.ccu" "$TREE/bin/node" 1)" = journal ] && pass "occulited alone: the journal" || fail "occulited alone: the journal" "$(log_target "$TMP/VERSION.ccu" "$TREE/bin/node" 1)"
+[ "$(log_target "$TMP/VERSION.lite" "$TMP/no-occulited" 0)" = file ] && pass "openccu-lite without systemd-cat: the file, rather than no log" || fail "openccu-lite without systemd-cat: the file, rather than no log" "$(log_target "$TMP/VERSION.lite" "$TMP/no-occulited" 0)"
+[ "$(log_target "$TMP/VERSION.ccu" "$TMP/no-occulited" 1)" = file ] && pass "a CCU: the file" || fail "a CCU: the file" "$(log_target "$TMP/VERSION.ccu" "$TMP/no-occulited" 1)"
+printf 'VERSION=3.89.11\nVARIANT=lite\n#LITE=1\n' > "$TMP/VERSION.variant"
+[ "$(log_target "$TMP/VERSION.variant" "$TMP/no-occulited" 1)" = file ] && pass "VARIANT=lite or a commented LITE= alone is not the rule" || fail "VARIANT=lite or a commented LITE= alone is not the rule" "$(log_target "$TMP/VERSION.variant" "$TMP/no-occulited" 1)"
+case "$(cat addon/files/hm2mqtt/rc.d/hm2mqtt)" in
+    *'RUN="exec systemd-cat -t $JOURNAL_TAG $NODE $APP"'*'rm -f $LOG $LOG.1'* | *'rm -f $LOG $LOG.1'*'RUN="exec systemd-cat -t $JOURNAL_TAG $NODE $APP"'*) pass "the journal start execs systemd-cat and removes the old file pair" ;;
+    *) fail "the journal start execs systemd-cat and removes the old file pair" "rc.d/hm2mqtt" ;;
 esac
 
 echo "getnames.cgi / setnames.cgi"
