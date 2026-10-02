@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.8.1
+
+### Changed
+
+- **openccu-lite: Catalogue description updated.** The addon catalogue of openccu-lite describes hm2mqtt as "MQTT
+  connection with configurable topics and payloads, Home Assistant auto discovery; follows the mqtt-smarthome
+  convention." (and the same in German). Only the manifest's description changed; the adapter is the same as in 3.8.0.
+
 ## 3.8.0
 
 ### Changed
