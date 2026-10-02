@@ -3,8 +3,8 @@
   "id": "hm2mqtt",
   "name": "hm2mqtt",
   "description": {
-    "de": "Homematic-Geräte per MQTT — mit den Namen und Räumen aus openccu-lite.",
-    "en": "Homematic devices over MQTT — with the names and rooms from openccu-lite."
+    "de": "MQTT-Anbindung mit konfigurierbaren Topics und Payloads, Home Assistant Auto Discovery; folgt der mqtt-smarthome-Konvention.",
+    "en": "MQTT connection with configurable topics and payloads, Home Assistant auto discovery; follows the mqtt-smarthome convention."
   },
   "homepage": "https://github.com/hobbyquaker/hm2mqtt.js",
   "licence": "MIT",
