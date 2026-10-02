@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **No HmIP-RF events after hmipserver restarted.** hmipserver keeps its subscribers over a restart: it calls
+  `listDevices` and `newDevices` on them and answers their pings, but delivers no event to such a kept subscription
+  until it is subscribed afresh. hm2mqtt kept waiting, and its ping watchdog never fired because the PONGs still
+  arrived; states stopped until the next restart of hm2mqtt. A `listDevices` or `newDevices` call that does not follow
+  hm2mqtt's own `init` now makes it subscribe again at once, and events are back within seconds. A device paired
+  while hm2mqtt runs costs one such `init` as well.
+
 ## 3.8.1
 
 ### Changed

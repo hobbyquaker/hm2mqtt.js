@@ -2,7 +2,15 @@ import {test, describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 
-import {RpcServers, RpcConnection, batchHints, initRetryDelay, notListening, METHODS} from '../lib/rpc.js';
+import {
+    RpcServers,
+    RpcConnection,
+    batchHints,
+    initRetryDelay,
+    notListening,
+    METHODS,
+    INIT_GRACE_MS,
+} from '../lib/rpc.js';
 import {createLogger} from 'mqtt-interfaces-core';
 
 function fakes() {
@@ -436,6 +444,124 @@ describe('RpcConnection', () => {
             [1, 2, 3, 4, 5, 6, 50].map((n) => initRetryDelay(n)),
             [1000, 2000, 4000, 8000, 15000, 15000, 15000],
         );
+    });
+
+    /**
+     * hmipserver as measured (B-5, openccu-lite B-286): a restart keeps the subscription, calls listDevices and
+     * newDevices on it and still answers pings with a PONG, but delivers no event to it until a fresh init.
+     */
+    function keptSubscription({created, calls}, id = 'hm2mqtt_hm_BidCos-RF') {
+        const inits = () => calls.filter((c) => c.method === 'init' && c.params[1] === id).length;
+        let mutedUntil = 0;
+        const call = (method, params) =>
+            new Promise((resolve) => created[0].emit(method, null, params, (_, res) => resolve(res)));
+        return {
+            inits,
+            call,
+            restart: async () => {
+                mutedUntil = inits() + 1;
+                await call('listDevices', [id]);
+                await call('newDevices', [id, [{ADDRESS: 'ABC'}]]);
+            },
+            // an event reaches the subscriber only when it was inited afresh after the restart
+            event: async (channel, datapoint, value) => {
+                if (inits() >= mutedUntil) {
+                    await call('event', [id, channel, datapoint, value]);
+                }
+            },
+            pong: () => call('event', [id, 'CENTRAL', 'PONG', 'hm2mqtt']),
+        };
+    }
+
+    test('B-5: listDevices/newDevices after our own init are not a restart', async () => {
+        const s = setup();
+        const daemon = keptSubscription(s);
+        await s.conn.start();
+        await s.timers.advance(INIT_GRACE_MS - 1);
+        await daemon.call('listDevices', ['hm2mqtt_hm_BidCos-RF']);
+        await daemon.call('newDevices', ['hm2mqtt_hm_BidCos-RF', []]);
+        await s.timers.advance(0);
+        assert.equal(daemon.inits(), 1);
+    });
+
+    test('B-5: a restart that kept the subscription is answered with a fresh init at once', async () => {
+        const s = setup({pingTimeout: 60});
+        const daemon = keptSubscription(s);
+        const events = [];
+        s.conn.on('event', (e) => events.push(e));
+        await s.conn.start();
+        await s.timers.advance(INIT_GRACE_MS + 1000);
+        const from = lines.length;
+        await daemon.restart(); // listDevices, then newDevices: one fresh init, not two
+        await daemon.event('ABC:1', 'STATE', true); // lost: the kept subscription is mute
+        assert.equal(events.length, 0);
+        await s.timers.advance(0);
+        assert.equal(daemon.inits(), 2);
+        assert.deepEqual(s.calls.filter((c) => c.method === 'init').at(-1).params, [
+            'http://10.0.0.2:2126',
+            'hm2mqtt_hm_BidCos-RF',
+        ]);
+        const said = lines.slice(from).filter((l) => l.includes('kept the subscription'));
+        assert.equal(said.length, 1);
+        assert.ok(said[0].startsWith('<6>') && said[0].includes('listDevices'), said[0]);
+        await daemon.event('ABC:1', 'STATE', false);
+        assert.deepEqual(
+            events.map((e) => e.value),
+            [false],
+        );
+        assert.equal(s.conn.connected, true);
+        // the daemon's own listDevices/newDevices answering the fresh init are not another restart
+        await daemon.call('listDevices', ['hm2mqtt_hm_BidCos-RF']);
+        await daemon.call('newDevices', ['hm2mqtt_hm_BidCos-RF', []]);
+        await s.timers.advance(0);
+        assert.equal(daemon.inits(), 2);
+    });
+
+    test('B-5: without the fresh init the PONGs would keep the ping watchdog satisfied', async () => {
+        // why the watchdog alone does not help: a kept subscription answers every ping, so it never re-inits
+        const s = setup({pingTimeout: 60});
+        const daemon = keptSubscription(s);
+        await s.conn.start();
+        s.conn.unsolicited = () => {}; // the old behaviour
+        await s.timers.advance(INIT_GRACE_MS + 1000);
+        await daemon.restart();
+        for (let i = 0; i < 20; i++) {
+            await s.timers.advance(15000);
+            if (s.calls.at(-1).method === 'ping') {
+                await daemon.pong();
+            }
+        }
+        assert.equal(daemon.inits(), 1);
+    });
+
+    test('B-5: no fresh init while an init is in flight, a retry is pending, or after stop', async () => {
+        const s = setup({ping: false});
+        const daemon = keptSubscription(s);
+        await s.conn.start();
+        await s.timers.advance(INIT_GRACE_MS + 1000);
+        // an init in flight: its own listDevices may arrive before its answer
+        s.conn.initInFlight = true;
+        await daemon.call('listDevices', ['hm2mqtt_hm_BidCos-RF']);
+        s.conn.initInFlight = false;
+        await s.timers.advance(0);
+        assert.equal(daemon.inits(), 1);
+        // a failed init waits for its retry; the retry is the fresh init
+        s.setFail((m) => m === 'init');
+        await s.conn.init();
+        assert.equal(daemon.inits(), 2);
+        s.setFail(null);
+        await daemon.call('listDevices', ['hm2mqtt_hm_BidCos-RF']);
+        await s.timers.advance(0);
+        assert.equal(daemon.inits(), 2);
+        await s.timers.advance(1000);
+        assert.equal(daemon.inits(), 3);
+        // stopped: nothing
+        await s.timers.advance(INIT_GRACE_MS + 1000);
+        await s.conn.stop();
+        const before = s.calls.length;
+        await daemon.call('listDevices', ['hm2mqtt_hm_BidCos-RF']);
+        await s.timers.advance(0);
+        assert.equal(s.calls.length, before);
     });
 
     test('stop unsubscribes', async () => {
