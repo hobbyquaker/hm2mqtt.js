@@ -16,6 +16,9 @@
     "architectures": ["armv7l", "aarch64", "x86_64"]
   },
   "ui": {
+    "icon": "hm2mqtt/www/icon.svg",
+    "logo": "hm2mqtt/www/logo.svg",
+    "logo_dark": "hm2mqtt/www/logo-dark.svg",
     "session_header": true
   },
   "runtime": {

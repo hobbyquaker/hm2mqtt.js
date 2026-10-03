@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 56" width="232" height="56">
+  <g transform="translate(4 4)">
+    <rect width="48" height="48" rx="10" fill="#1d6f8b"/>
+    <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 18h18l-5-5"/>
+      <path d="M33 30H15l5 5"/>
+    </g>
+    <circle cx="10" cy="24" r="3.5" fill="#fff"/>
+    <circle cx="38" cy="24" r="3.5" fill="#fff"/>
+  </g>
+  <text x="64" y="39" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="30" font-weight="700" fill="#f2f2f5">hm2mqtt</text>
+</svg>
