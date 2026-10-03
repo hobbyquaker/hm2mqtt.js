@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.8.3
+
+### Changed
+
+- **openccu-lite: an icon and a logo.** The addon manifest declares an icon and a logo with a dark variant
+  (`www/icon.svg`, `www/logo.svg`, `www/logo-dark.svg`), so openccu-lite shows them in its addon menu, tab bar,
+  Services rows, Addons page and catalogue instead of the addon's initial. The adapter is the same as in 3.8.2.
+
 ## 3.8.2
 
 ### Fixed
