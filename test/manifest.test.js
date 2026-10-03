@@ -28,6 +28,18 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early', api_scopes: ['logs:read']});
     assert.ok(note.de && note.en);
     // the settings page and every CGI read openccu-lite's session header (task 20), so the system
-    // opens the page without appending ?sid=
-    assert.deepEqual(manifest.ui, {session_header: true});
+    // opens the page without appending ?sid=; the icon and the logo (task 26) are the SVGs in www/,
+    // which the system serves from the installed tree (the path's first segment is the package
+    // directory that becomes /usr/local/addons/hm2mqtt) and the catalogue reads beside the manifest
+    assert.deepEqual(manifest.ui, {
+        icon: 'hm2mqtt/www/icon.svg',
+        logo: 'hm2mqtt/www/logo.svg',
+        logo_dark: 'hm2mqtt/www/logo-dark.svg',
+        session_header: true,
+    });
+    for (const p of [manifest.ui.icon, manifest.ui.logo, manifest.ui.logo_dark]) {
+        const svg = readFileSync(new URL(p, root), 'utf8');
+        assert.ok(svg.trimStart().startsWith('<svg'), `${p} is an SVG`);
+        assert.ok(svg.length < 256 * 1024, `${p} is under the system's 256 KiB`);
+    }
 });
