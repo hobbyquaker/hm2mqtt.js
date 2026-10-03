@@ -90,7 +90,7 @@ broadcasts the eQ-3 discovery datagram (UDP 43439) and prints every CCU that ans
 firmware version and the interfaces whose ports are open:
 
 ```
-172.16.24.145  eQ3-HmIP-CCU3-App  serial 3014F711A0001F58A992F585  [ReGa BidCos-RF BidCos-Wired HmIP-RF VirtualDevices]  (udp)
+192.168.1.10  eQ3-HmIP-CCU3-App  serial 3014F711A0000000000ABCDE  [ReGa BidCos-RF BidCos-Wired HmIP-RF VirtualDevices]  (udp)
 ```
 
 `--discover-json` prints the same as JSON. `-a auto` runs the scan at start and uses the CCU it
@@ -105,8 +105,8 @@ A broadcast does not cross a router. If the CCU is on another subnet — a separ
 house automation is a common setup — name it (or its subnet's broadcast address):
 
 ```
-hm2mqtt --discover --discover-address 172.16.24.145
-hm2mqtt -a auto --discover-address 172.16.24.255 -u mqtt://broker
+hm2mqtt --discover --discover-address 192.168.1.10
+hm2mqtt -a auto --discover-address 192.168.1.255 -u mqtt://broker
 ```
 
 `--discover-timeout` (default 5 s) is how long the scan listens. The scanning itself lives in
