@@ -48,9 +48,10 @@ so the CCU can call back. `--restart unless-stopped` brings it back after `maint
 
 ### On the CCU itself (addon package)
 
-For a setup without a server: hm2mqtt also ships as a CCU addon, installed in the WebUI under
-_Systemsteuerung → Zusatzsoftware_. Pick the package for your hardware from the
-[latest release](https://github.com/hobbyquaker/hm2mqtt.js/releases/latest):
+For a setup without a server: hm2mqtt also ships as an addon for the Homematic CCU3,
+[openccu-lite](https://github.com/hobbyquaker/openccu-lite) and OpenCCU. On a CCU3 or OpenCCU it is
+installed in the WebUI under _Systemsteuerung → Zusatzsoftware_. Pick the package for your hardware
+from the [latest release](https://github.com/hobbyquaker/hm2mqtt.js/releases/latest):
 
 | Platform                                                         | Package                                |
 | ---------------------------------------------------------------- | -------------------------------------- |
