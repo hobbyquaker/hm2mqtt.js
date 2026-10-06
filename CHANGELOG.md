@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.8.4
+
+### Fixed
+
+- **Home Assistant: a device stayed unavailable while its `UNREACH` had never been published.** Every device's
+  availability is `<name>/connected` **and** the device's `…:0/UNREACH`, and Home Assistant shows an entity as
+  unavailable until each of its availability topics has delivered a value. hm2mqtt publishes `UNREACH` on a change
+  (or at start with `--publish-cache`, which is off by default and not available on openccu-lite), so a device that
+  never lost its radio link had no `UNREACH` on the broker — and all its entities were unavailable, although their
+  states updated. With mqtt-interfaces-core 0.17.0 the `UNREACH` entry is left out of the discovery until a value has
+  been published, and the device is announced again with it then. Found through a node-red-contrib-ccu user's report
+  of the same pattern there — thank you!
+
 ## 3.8.3
 
 ### Changed
