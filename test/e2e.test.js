@@ -188,7 +188,8 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
                     },
                 ],
                 programs: [{id: 2000, name: 'Licht aus', info: '', active: true, ts: '2026-01-01 12:00:00'}],
-                rooms: [{id: 20, name: 'Flur', channels: [1001, 1002]}],
+                // a non-ASCII room name: the mock answers in ISO-8859-1 like the real ReGaHSS (hm-simulator >= 1.0)
+                rooms: [{id: 20, name: 'Küche', channels: [1001, 1002]}],
                 functions: [{id: 30, name: 'Taster', channels: [1001]}],
             },
         });
@@ -285,7 +286,7 @@ describe('e2e with hm-simulator', {skip: !enabled && 'set HM2MQTT_E2E=1'}, () =>
         assert.equal(p.hm.datapoint, 'PRESS_SHORT');
         assert.equal(p.hm.datapointName, 'BidCos-RF.BidCoS-RF:1.PRESS_SHORT');
         assert.equal(p.hm.datapointType, 'ACTION');
-        assert.deepEqual(p.hm.rooms, ['Flur']);
+        assert.deepEqual(p.hm.rooms, ['Küche']);
         assert.equal(p.hm.function, 'Taster');
         assert.equal(p.hm.change, true);
         assert.equal(p.hm.cache, false);

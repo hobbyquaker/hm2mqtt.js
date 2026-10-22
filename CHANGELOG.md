@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.9.1
+
+### Fixed
+
+- **Home Assistant logged an error for the HmIP-PS and for every device's maintenance channel.** The generic
+  discovery layer announced the HmIP-PS's `PROCESS` enum as a `sensor` with `device_class: running` and the maintenance
+  channel's `STICKY_UNREACH` as a `switch` with `device_class: problem` - classes only `binary_sensor` knows - and Home
+  Assistant refused those components ("expected SensorDeviceClass …", "expected SwitchDeviceClass …") while it
+  created the devices and their other entities. `STICKY_UNREACH` is no longer announced at all (the maintainer's
+  decision: "UNREACH is enough"), and a device class a platform does not accept is dropped from any component before
+  it goes out; a test checks every component of every device of the fixture CCU against Home Assistant's device
+  classes per platform.
+
+### Changed
+
+- **The tests run against hm-simulator 1.4** instead of 0.1.1 (the `overrides` block for its `homematic-xmlrpc` is
+  gone with it). The old simulator's ReGa mock sent UTF-8 where the real ReGaHSS speaks ISO-8859-1, so non-ASCII
+  names came back garbled there; the e2e test now uses a room named `Küche` to guard that.
+
 ## 3.9.0
 
 ### Added

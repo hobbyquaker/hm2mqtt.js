@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {discoveryModel, resolveVirtualReceivers, suggestedArea} from '../lib/hadiscovery.js';
+import {
+    DEVICE_CLASSES,
+    NOT_ANNOUNCED,
+    discoveryModel,
+    resolveVirtualReceivers,
+    suggestedArea,
+    validDeviceClass,
+} from '../lib/hadiscovery.js';
 import {Metadata} from '../lib/metadata.js';
 import {createLogger} from 'mqtt-interfaces-core';
 
@@ -307,6 +314,52 @@ describe('discoveryModel', () => {
         assert.equal('sa' in byModel(none, 'HM-ES-PMSw1-Pl').device, false, 'no rooms known (no ReGa yet)');
         const two = discoveryModel(ctx({rooms: (address) => (address.endsWith(':1') ? ['Küche'] : ['Flur'])}));
         assert.equal(byModel(two, 'HM-ES-PMSw1-Pl').device.sa, 'Flur', "several rooms → the first roomed address's");
+    });
+
+    test('B-8: every announced component carries a device class its platform accepts', () => {
+        const wrong = [];
+        let classed = 0;
+        for (const b of blocks) {
+            for (const [key, c] of Object.entries(b.components)) {
+                if (c.dev_cla === undefined) {
+                    continue;
+                }
+                classed += 1;
+                if (!validDeviceClass(c.p, c.dev_cla)) {
+                    wrong.push(`${b.id} ${key}: ${c.p} with ${c.dev_cla}`);
+                }
+            }
+        }
+        assert.deepEqual(wrong, []);
+        assert.ok(classed > 100, 'the check saw many classed components');
+        // the PROCESS enum (HmIP-PS and others): a sensor, so without the binary_sensor class `running`
+        const process = blocks.flatMap((b) => Object.entries(b.components).filter(([key]) => key.endsWith('_PROCESS')));
+        assert.ok(process.length > 0, 'PROCESS is announced somewhere in the fixture CCU');
+        for (const [, c] of process) {
+            assert.equal(c.p, 'sensor');
+            assert.equal(c.dev_cla, undefined);
+        }
+        assert.equal(validDeviceClass('sensor', 'running'), false);
+        assert.equal(validDeviceClass('binary_sensor', 'running'), true);
+        assert.equal(validDeviceClass('switch', 'problem'), false);
+        assert.equal(validDeviceClass('light', 'anything'), false, 'platforms without classes accept none');
+        assert.ok(DEVICE_CLASSES.number.size < DEVICE_CLASSES.sensor.size, 'number lacks date/enum/timestamp/uptime');
+    });
+
+    test('STICKY_UNREACH is not announced, UNREACH is (the maintainer, 2026-10-22)', () => {
+        assert.ok(NOT_ANNOUNCED.has('STICKY_UNREACH'));
+        let unreach = 0;
+        for (const b of blocks) {
+            for (const [key, c] of Object.entries(b.components)) {
+                assert.equal(key.endsWith('_STICKY_UNREACH'), false, `${b.id} ${key}`);
+                if (key === '0_UNREACH') {
+                    unreach += 1;
+                    assert.equal(c.p, 'binary_sensor');
+                    assert.equal(c.dev_cla, 'connectivity');
+                }
+            }
+        }
+        assert.ok(unreach > 10, 'UNREACH stays on the maintenance channels');
     });
 
     test('resolveVirtualReceivers', () => {

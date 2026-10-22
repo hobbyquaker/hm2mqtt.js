@@ -78,12 +78,7 @@
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
     "globals": "^16.0.0",
-    "hm-simulator": "^0.1.1",
+    "hm-simulator": "^1.4.0",
     "prettier": "^3.0.0"
-  },
-  "overrides": {
-    "hm-simulator": {
-      "homematic-xmlrpc": "^2.0.0"
-    }
   }
 }
