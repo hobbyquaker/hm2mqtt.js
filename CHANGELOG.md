@@ -435,7 +435,7 @@
 - `set/<channel>/LEVEL` accepts `OPEN`/`CLOSE`/`STOP`/`ON`/`OFF`; HM thermostats accept
   `set/<channel>/CONTROL_MODE` with `AUTO-MODE`/`MANU-MODE`/`BOOST-MODE`/`COMFORT-MODE`/
   `LOWERING-MODE`; key presses are also published as `status/<channel>/PRESS` (not retained).
-- `--ignore` globs on `<interface>.<channel>.<datapoint>` (B-4).
+- `--ignore` globs on `<interface>.<channel>.<datapoint>`.
 
 ## 3.1.0
 
