@@ -183,6 +183,7 @@ const adapter = createAdapter({
             name: config.name,
             jsonPayloads: config.jsonPayloads,
             generic: config.haGeneric,
+            area: config.haArea,
             devices: metadata.devices,
             description: (iface, address) => metadata.description(iface, address, 'VALUES'),
             channelName,

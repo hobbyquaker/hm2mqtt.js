@@ -120,6 +120,11 @@ export const OPTIONS = {
         de: 'Generische Entitäten für alle Datenpunkte',
         en: 'Generic entities for every datapoint',
     },
+    'ha-area': {
+        group: 'ha',
+        de: 'Raum der Kanäle als Bereich vorschlagen',
+        en: "Suggest the channels' room as the area",
+    },
 
     // --- filter ------------------------------------------------------------------------------
     ignore: {group: 'filter', widget: 'globs', de: 'Datenpunkte ignorieren', en: 'Ignore datapoints'},

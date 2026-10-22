@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.9.0
+
+### Added
+
+- **Home Assistant creates a device in the room of its channels.** The discovery carries the room as the device's
+  `suggested_area` - until now only when every channel of the device lay in one and the same room, so a device with
+  channels in two rooms got no area. Now it is the room shared by all channels of the device that lie in a room,
+  otherwise the room of the lowest-numbered channel that lies in one (a channel in several rooms counts with its
+  first, a room of the device itself comes first); the rooms are the ReGa's on a CCU and the metadata API's on
+  openccu-lite. New option `--ha-area` / `--no-ha-area` (on by default; also on the addon's settings page). Home
+  Assistant applies the suggestion only when it first creates the device; a room changed later stays as assigned
+  in Home Assistant.
+
 ## 3.8.4
 
 ### Fixed

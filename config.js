@@ -160,6 +160,11 @@ export const OPTIONS = {
         describe: 'Home Assistant discovery: also announce datapoints without a role as (disabled) generic entities',
         default: true,
     },
+    'ha-area': {
+        type: 'boolean',
+        describe: "Home Assistant discovery: suggest the channels' room as the device's area (suggested_area)",
+        default: true,
+    },
     'rpc-topics': {
         type: 'boolean',
         describe: 'accept arbitrary rpc calls on <name>/rpc/<interface>/<method>/<callid> (security surface!)',

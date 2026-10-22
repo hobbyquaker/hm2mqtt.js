@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {discoveryModel, resolveVirtualReceivers} from '../lib/hadiscovery.js';
+import {discoveryModel, resolveVirtualReceivers, suggestedArea} from '../lib/hadiscovery.js';
 import {Metadata} from '../lib/metadata.js';
 import {createLogger} from 'mqtt-interfaces-core';
 
@@ -270,6 +270,43 @@ describe('discoveryModel', () => {
         const sw = byModel(plain, 'HM-ES-PMSw1-Pl').components['1_STATE'];
         assert.doesNotMatch(sw.val_tpl, /value_json/);
         assert.equal(sw.val_tpl.includes("'1', 'true', 'on'"), true);
+    });
+
+    test("suggestedArea: the room the roomed channels share, else the lowest-numbered roomed channel's first (task 28)", () => {
+        const chs = (...addresses) => addresses.map((ADDRESS) => ({ADDRESS}));
+        const by = (map) => (address) => map[address];
+        const three = chs('D:0', 'D:1', 'D:2');
+        assert.equal(suggestedArea(by({}), 'D', three), undefined, 'no room anywhere');
+        assert.equal(suggestedArea(by({'D:1': []}), 'D', three), undefined, 'empty lists count as no room');
+        assert.equal(suggestedArea(by({'D:1': ['Küche']}), 'D', three), 'Küche', 'one channel in one room');
+        assert.equal(suggestedArea(by({'D:2': ['Flur']}), 'D', three), 'Flur', 'the maintenance channel needs no room');
+        assert.equal(
+            suggestedArea(by({'D:1': ['Küche'], 'D:2': ['Flur']}), 'D', three),
+            'Küche',
+            "different rooms → the lowest-numbered channel's",
+        );
+        assert.equal(
+            suggestedArea(by({'D:1': ['Küche', 'Flur'], 'D:2': ['Flur']}), 'D', three),
+            'Flur',
+            "a room all roomed channels share wins over the first channel's first room",
+        );
+        assert.equal(
+            suggestedArea(by({D: ['Keller'], 'D:1': ['Küche']}), 'D', three),
+            'Keller',
+            'a room of the device itself comes first',
+        );
+    });
+
+    test('the suggested area in the device block, and --no-ha-area', () => {
+        // the shared ctx puts every :1 channel into Flur: that is the area of every device with a :1
+        assert.equal(byModel(blocks, 'HM-ES-PMSw1-Pl').device.sa, 'Flur');
+        const off = discoveryModel(ctx({area: false}));
+        assert.equal(byModel(off, 'HM-ES-PMSw1-Pl').device.sa, undefined, 'area off → no suggested_area');
+        assert.equal('sa' in byModel(off, 'HM-ES-PMSw1-Pl').device, false, 'the key is left out, not null');
+        const none = discoveryModel(ctx({rooms: () => undefined}));
+        assert.equal('sa' in byModel(none, 'HM-ES-PMSw1-Pl').device, false, 'no rooms known (no ReGa yet)');
+        const two = discoveryModel(ctx({rooms: (address) => (address.endsWith(':1') ? ['Küche'] : ['Flur'])}));
+        assert.equal(byModel(two, 'HM-ES-PMSw1-Pl').device.sa, 'Flur', "several rooms → the first roomed address's");
     });
 
     test('resolveVirtualReceivers', () => {
