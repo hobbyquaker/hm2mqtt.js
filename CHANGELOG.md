@@ -8,8 +8,8 @@
   discovery layer announced the HmIP-PS's `PROCESS` enum as a `sensor` with `device_class: running` and the maintenance
   channel's `STICKY_UNREACH` as a `switch` with `device_class: problem` - classes only `binary_sensor` knows - and Home
   Assistant refused those components ("expected SensorDeviceClass …", "expected SwitchDeviceClass …") while it
-  created the devices and their other entities. `STICKY_UNREACH` is no longer announced at all (the maintainer's
-  decision: "UNREACH is enough"), and a device class a platform does not accept is dropped from any component before
+  created the devices and their other entities. `STICKY_UNREACH` is no longer announced at all
+  (UNREACH covers it), and a device class a platform does not accept is dropped from any component before
   it goes out; a test checks every component of every device of the fixture CCU against Home Assistant's device
   classes per platform.
 
