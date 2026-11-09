@@ -220,6 +220,36 @@ describe('ValueStore', () => {
         s.stop();
     });
 
+    test("stored values: openccu-lite's timestamps, uncertain only when unconfirmed", () => {
+        const timers = fakeTimers();
+        const s = store(timers);
+        const m = s.stored({
+            iface: 'HmIP-RF',
+            channel: 'ABC:1',
+            datapoint: 'STATE',
+            value: true,
+            ts: 500,
+            lc: 200,
+            confirmed: true,
+        });
+        assert.equal(m.cache, true);
+        assert.equal(m.change, false);
+        assert.equal(m.uncertain, false);
+        assert.equal(m.ts, 500);
+        assert.equal(m.lc, 200);
+        assert.equal(m.working, false);
+        assert.equal(s.get('HmIP-RF', 'ABC:1', 'STATE'), m);
+        // restored by the system, not reported since
+        const u = s.stored({iface: 'HmIP-RF', channel: 'ABC:1', datapoint: 'LEVEL', value: 0, confirmed: false});
+        assert.equal(u.uncertain, true);
+        assert.equal(u.ts, 1000);
+        assert.equal(u.lc, 1000);
+        // read by the client's sweep: no lc of its own, and not uncertain
+        const w = s.stored({iface: 'HmIP-RF', channel: 'ABC:1', datapoint: 'ON_TIME', value: 0, ts: 700});
+        assert.equal(w.uncertain, false);
+        assert.equal(w.lc, 700);
+    });
+
     test('cached values: flags, timestamps, RSSI fix, bad names', () => {
         const timers = fakeTimers();
         const s = store(timers);

@@ -12,12 +12,21 @@ import {
     DEFAULT_TOPIC_PROGRAM_SET,
 } from './lib/topics.js';
 
+/**
+ * Whether the command line asks for pairing only (`--pair` or `--pair <url>`): the url names the
+ * system, so --ccu-address is not demanded then.
+ * @param {string[]} argv
+ */
+export function pairRequested(argv) {
+    return argv.some((arg) => arg === '--pair' || arg.startsWith('--pair='));
+}
+
 export const OPTIONS = {
     'ccu-address': {
         alias: 'a',
         type: 'string',
         describe: 'hostname or ip of the CCU, or "auto" to find it on the network (see --discover)',
-        demandOption: true,
+        demandOption: !pairRequested(process.argv),
         discover: true,
     },
     'ccu-tls': {type: 'boolean', describe: 'use the TLS ports (4xxxx) and https for ReGa', default: false},
@@ -72,15 +81,33 @@ export const OPTIONS = {
         type: 'string',
         describe: 'channel.datapoint whose event triggers a variable/program poll, e.g. BidCoS-RF:50.PRESS_SHORT',
     },
-    'meta-token': {
+    backend: {
         type: 'string',
         describe:
-            'openccu-lite API token (olt_...) for names, rooms and functions - not needed on the box itself, where the local token is read',
+            'what --ccu-address is: auto (ask it), ccu (a CCU3, OpenCCU or RaspberryMatic) or openccu-lite (connect through its API)',
+        choices: ['auto', 'ccu', 'openccu-lite'],
+        default: 'auto',
+    },
+    pair: {
+        type: 'string',
+        describe:
+            'pair with the openccu-lite system at this url (default: --ccu-address), store the credential in the state directory and exit',
+    },
+    'pair-on-start': {
+        type: 'boolean',
+        describe: 'pair with the openccu-lite system at start when no credential is stored (docker)',
+        default: false,
+    },
+    'meta-token': {
+        alias: 'token',
+        type: 'string',
+        describe:
+            'openccu-lite API token (olt_...) instead of pairing - not needed on the system itself, where the local token is read for the names',
         secret: true,
     },
     'meta-url': {
         type: 'string',
-        describe: "base url of openccu-lite's metadata api (default: http[s]://<ccu-address>)",
+        describe: "base url of openccu-lite's API (default: http[s]://<ccu-address>)",
     },
     'ccu-timezone': {type: 'string', describe: "IANA time zone of the CCU (default: this host's time zone)"},
     'name-file': {
@@ -189,6 +216,7 @@ export default applyItemTemplates(
             ['$0 -a homematic-ccu3 -u mqtt://broker', 'run in the foreground'],
             ['$0 -a 192.168.1.50 -i BidCos-RF,HmIP-RF --plain-tree state', 'two interfaces plus the plain mirror tree'],
             ['sudo $0 --install -n hm -a homematic-ccu3 -u mqtt://broker', 'install as service hm2mqtt@hm'],
+            ['$0 --pair https://192.168.1.20', 'pair with an openccu-lite system and exit'],
         ],
     }),
 );

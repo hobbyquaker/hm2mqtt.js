@@ -1,7 +1,8 @@
 /**
  * Against a real box: `occulited` (openccu-lite's daemon) with a state directory of its own, the
- * hm-simulator for the interfaces and an in-process broker — the whole adapter, taking its names,
- * rooms and functions from the metadata API instead of from ReGa.
+ * hm-simulator for the interfaces and an in-process broker — the whole adapter as it runs on the
+ * system itself (the address is the loopback): the interfaces over their own ports, the names,
+ * rooms and functions from the metadata API through occulite-client instead of from ReGa.
  *
  * Opt-in, because it needs the daemon binary:
  *
@@ -23,7 +24,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import mqtt from 'mqtt';
 
-import {MetaSync, detectMeta, readLocalToken} from '../lib/meta.js';
+import {LiteHub, LiteNames, chooseBackend, createLiteClient} from '../lib/lite.js';
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -303,9 +304,13 @@ describe('openccu-lite (occulited)', {skip}, () => {
         }
     });
 
+    /** the names provider as the adapter makes it on the system, here with a credential of choice */
+    const namesFrom = (auth, log) =>
+        new LiteNames({hub: new LiteHub({url: boxUrl, auth: () => auth, namesOnly: true, log}), log});
+
     test('the provider reads names, rooms and functions from the box', {timeout: 30000}, async () => {
         const log = fakeLog();
-        const sync = new MetaSync({url: boxUrl, token: sid, log});
+        const sync = namesFrom({token: sid}, log);
         await sync.syncNames();
         assert.equal(sync.channelName('BidCoS-RF:1'), 'Taster Küche');
         assert.deepEqual(sync.rooms('BidCoS-RF:1'), ['Küche']);
@@ -334,23 +339,34 @@ describe('openccu-lite (occulited)', {skip}, () => {
         assert.deepEqual(sync.rooms('BidCoS-RF:1'), ['Kochnische']);
 
         sync.stopPolling();
+        sync.hub.stop();
         // put the names back for the adapter test below
         await api('/api/meta/v1/enums/room/nodes/eg/kueche', {method: 'PATCH', body: {name: 'Küche'}});
     });
 
     test('detection: the box answers, the simulator does not', {timeout: 30000}, async () => {
-        const found = await detectMeta(boxUrl);
-        assert.equal(found.ok, true);
-        assert.equal(found.version.api, 'meta');
-        assert.match(found.version.implementation, /occulited/);
+        // on the loopback the box is this system; elsewhere it is connected through its API
+        const isLite = () => false;
+        assert.deepEqual(await chooseBackend({url: boxUrl, loopback: true, isLite}), {kind: 'on-system'});
+        assert.deepEqual(await chooseBackend({url: boxUrl, loopback: false, isLite}), {kind: 'remote', url: boxUrl});
         // the CCU port of the simulator is not the metadata api
-        const other = await detectMeta('http://127.0.0.1:2001');
-        assert.equal(other.ok, false);
+        const other = await chooseBackend({url: 'http://127.0.0.1:2001', loopback: true, isLite});
+        assert.equal(other.kind, 'ccu');
     });
 
-    test("the box's local token is read-only", {timeout: 30000}, async () => {
-        const token = readLocalToken(path.join(state, 'local-token'));
+    test("the box's local token is read-only, and enough for the names", {timeout: 30000}, async () => {
+        const token = fs.readFileSync(path.join(state, 'local-token'), 'utf8').trim();
         assert.match(token, /^olt_[0-9a-f]{32}$/);
+        // what the adapter reads on the system: names only, through occulite-client
+        const log = fakeLog();
+        const sync = namesFrom({local: true}, log);
+        sync.hub.createClient = (o) => createLiteClient({...o, localTokenFile: path.join(state, 'local-token')});
+        await sync.syncNames();
+        assert.equal(sync.hub.box.mode, 'names-only');
+        assert.equal(sync.hub.box.credential, 'local');
+        assert.equal(sync.channelName('BidCoS-RF:1'), 'Taster Küche');
+        sync.stopPolling();
+        sync.hub.stop();
         assert.equal((await api('/api/meta/v1/snapshot', {token})).status, 200);
         assert.equal(
             (await api('/api/meta/v1/objects/BidCos-RF.BidCoS-RF%3A1', {token, method: 'PATCH', body: {name: 'x'}}))
@@ -361,11 +377,12 @@ describe('openccu-lite (occulited)', {skip}, () => {
 
     test('no credential: the provider degrades to addresses', {timeout: 30000}, async () => {
         const log = fakeLog();
-        const sync = new MetaSync({url: boxUrl, tokenFile: path.join(dir, 'no-such-token'), log});
-        await sync.syncNames();
+        const sync = namesFrom({token: 'olt_00000000000000000000000000000000'}, log);
+        await assert.rejects(sync.syncNames());
         assert.deepEqual(sync.channelNames, {});
-        assert.equal(log.lines.warn.filter((line) => line.includes('rejected the credential')).length, 1);
+        assert.equal(log.lines.error.filter((line) => line.includes('refused the credential')).length, 1);
         sync.stopPolling();
+        sync.hub.stop();
     });
 
     test('the adapter publishes with the names from the box', {timeout: 60000}, async () => {
@@ -413,7 +430,7 @@ describe('openccu-lite (occulited)', {skip}, () => {
 
         // system variables and programs are named as unavailable, once, and nothing polls for them
         const log = fs.readFileSync(logFile, 'utf8');
-        assert.equal(log.split('no ReGaHSS on this box').length - 1, 1);
+        assert.equal(log.split('no ReGaHSS on openccu-lite').length - 1, 1);
         assert.doesNotMatch(log, /TypeError|ReferenceError|Unhandled/);
     });
 

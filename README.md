@@ -44,7 +44,8 @@ docker run -d --name hm2mqtt --restart unless-stopped --network host -v hm2mqtt:
 ```
 
 Host networking, or publish 2126/2127 and set `HM2MQTT_INIT_ADDRESS` to the docker host's address
-so the CCU can call back. `--restart unless-stopped` brings it back after `maintenance/set/restart`.
+so the CCU can call back. An openccu-lite needs neither: see
+[On another host](#on-another-host-npm-docker). `--restart unless-stopped` brings it back after `maintenance/set/restart`.
 
 ### On the CCU itself (addon package)
 
@@ -120,30 +121,35 @@ the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-disco
 `HM2MQTT_<OPTION>` (e.g. `HM2MQTT_CCU_ADDRESS`), plus the unprefixed `MQTT_URL`, `MQTT_USERNAME`,
 `MQTT_PASSWORD`, `MQTT_TLS_CA` as fallback. Precedence: command line > environment > defaults.
 
-| option                                                                                                                                       | default                                           | description                                                                                                             |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `-a, --ccu-address`                                                                                                                          | —                                                 | hostname or ip of the CCU (required)                                                                                    |
-| `--ccu-tls`, `--ccu-insecure`, `--ccu-username`, `--ccu-password`                                                                            | off                                               | TLS ports (42001, 42010, …, ReGa 48181) and authentication of a CCU with the firewall/auth enabled                      |
-| `-i, --interfaces`                                                                                                                           | `BidCos-RF,HmIP-RF,VirtualDevices,BidCos-Wired`   | interfaces to subscribe to (`CUxD` opt-in), or `auto` to probe the ports                                                |
-| `--bidcos-binrpc`                                                                                                                            | off                                               | binrpc instead of xmlrpc for BidCos-RF/-Wired (CCU2, Homegear; a CCU3 proxies xmlrpc only)                              |
-| `-l, --listen-address`, `--init-address`, `--xmlrpc-port`, `--binrpc-port`                                                                   | first ipv4, =listen, 2126, 2127                   | callback servers the CCU pushes events to; `--init-address` when the CCU sees another address (NAT, Docker)             |
-| `--ping-timeout`                                                                                                                             | 60                                                | seconds without an event before a ping, twice that before a re-init (HmIP-RF uses 600)                                  |
-| `--rega` / `--no-rega`                                                                                                                       | on                                                | names, rooms, functions, variables and programs from the ReGaHSS                                                        |
-| `--rega-poll-interval`, `--rega-poll-trigger`                                                                                                | 30, —                                             | variable/program poll interval (0 = off) and an optional `channel.datapoint` (virtual button) that triggers a poll      |
-| `--ccu-timezone`                                                                                                                             | host                                              | IANA time zone of the CCU, for the timestamps of variables and cached values                                            |
-| `-m, --name-file`                                                                                                                            | —                                                 | JSON `{address: name}` overriding ReGa names ([example-names.json](example-names.json))                                 |
-| `--item-template`, `--sysvar-item-template`, `--program-item-template`                                                                       | `${channelName\|channel}/${datapoint}`, `${name}` | how items (topic parts) are built, see [Item templates](#item-templates)                                                |
-| `--rega-names-interval`                                                                                                                      | 3600                                              | seconds between re-reads of names/rooms/functions (0 = only at start and on `set/rega/sync`)                            |
-| `--payload`                                                                                                                                  | `mqsh-extended`                                   | status payload format: `mqsh-extended`, `mqsh-basic` or `plain` ([Payloads](#payloads))                                 |
-| `--plain-tree <level>`                                                                                                                       | —                                                 | additionally publish plain payloads under `<name>/<level>/…` (the second `ccu-mqtt` node of the Node-RED flow)          |
-| `--publish-cache`                                                                                                                            | off                                               | publish every datapoint value known to the ReGa at start (thousands of retained messages)                               |
-| `--publish-counters`, `--duty-cycle-interval`                                                                                                | on, 90                                            | rpc rx/tx counters and `listBidcosInterfaces` duty cycle polling (0 = off)                                              |
-| `--rpc-topics`                                                                                                                               | off                                               | arbitrary rpc calls via MQTT — an unrestricted API surface, only on a trusted broker                                    |
-| `--ignore`                                                                                                                                   | —                                                 | comma separated globs on `<interface>.<channel>.<datapoint>` not to publish, e.g. `*.*.RSSI_*,HmIP-RF.*.*_STATUS`       |
-| `--ha-generic` / `--no-ha-generic`                                                                                                           | on                                                | announce datapoints without a role as (disabled) generic entities ([Home Assistant](#home-assistant))                   |
-| `--ha-area` / `--no-ha-area`                                                                                                                 | on                                                | suggest the channels' room as the device's area in Home Assistant (`suggested_area`, [Home Assistant](#home-assistant)) |
-| `--state-dir`                                                                                                                                | `$STATE_DIRECTORY` or `~/.hm2mqtt`                | devices, paramset descriptions, names and last values                                                                   |
-| `-u, --mqtt-url`, `--mqtt-username`, `--mqtt-password`, `--mqtt-tls-ca`, `-n, --name`, `--json-payloads`, `--maintenance`, `-v, --verbosity` | core                                              | shared options of every adapter; `--name` (default `hm`) is the topic prefix                                            |
+| option                                                                                                                                       | default                                           | description                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `-a, --ccu-address`                                                                                                                          | —                                                 | hostname or ip of the CCU (required)                                                                                        |
+| `--ccu-tls`, `--ccu-insecure`, `--ccu-username`, `--ccu-password`                                                                            | off                                               | TLS ports (42001, 42010, …, ReGa 48181) and authentication of a CCU with the firewall/auth enabled                          |
+| `-i, --interfaces`                                                                                                                           | `BidCos-RF,HmIP-RF,VirtualDevices,BidCos-Wired`   | interfaces to subscribe to (`CUxD` opt-in), or `auto` to probe the ports                                                    |
+| `--bidcos-binrpc`                                                                                                                            | off                                               | binrpc instead of xmlrpc for BidCos-RF/-Wired (CCU2, Homegear; a CCU3 proxies xmlrpc only)                                  |
+| `-l, --listen-address`, `--init-address`, `--xmlrpc-port`, `--binrpc-port`                                                                   | first ipv4, =listen, 2126, 2127                   | callback servers the CCU pushes events to; `--init-address` when the CCU sees another address (NAT, Docker)                 |
+| `--ping-timeout`                                                                                                                             | 60                                                | seconds without an event before a ping, twice that before a re-init (HmIP-RF uses 600)                                      |
+| `--rega` / `--no-rega`                                                                                                                       | on                                                | names, rooms, functions, variables and programs from the ReGaHSS                                                            |
+| `--backend`                                                                                                                                  | `auto`                                            | what `--ccu-address` is: `auto` (asked at start), `ccu` or `openccu-lite` - see [openccu-lite](#openccu-lite)               |
+| `--pair [url]`                                                                                                                               |                                                   | pair with the openccu-lite system at `url` (default: `--ccu-address`), store the credential in the state directory and exit |
+| `--pair-on-start`                                                                                                                            | off                                               | pair at start when no credential is stored (docker)                                                                         |
+| `--meta-token`                                                                                                                               |                                                   | an openccu-lite API token instead of pairing                                                                                |
+| `--meta-url`                                                                                                                                 | `http[s]://<ccu-address>`                         | base url of openccu-lite's API (a proxy, another port)                                                                      |
+| `--rega-poll-interval`, `--rega-poll-trigger`                                                                                                | 30, —                                             | variable/program poll interval (0 = off) and an optional `channel.datapoint` (virtual button) that triggers a poll          |
+| `--ccu-timezone`                                                                                                                             | host                                              | IANA time zone of the CCU, for the timestamps of variables and cached values                                                |
+| `-m, --name-file`                                                                                                                            | —                                                 | JSON `{address: name}` overriding ReGa names ([example-names.json](example-names.json))                                     |
+| `--item-template`, `--sysvar-item-template`, `--program-item-template`                                                                       | `${channelName\|channel}/${datapoint}`, `${name}` | how items (topic parts) are built, see [Item templates](#item-templates)                                                    |
+| `--rega-names-interval`                                                                                                                      | 3600                                              | seconds between re-reads of names/rooms/functions (0 = only at start and on `set/rega/sync`)                                |
+| `--payload`                                                                                                                                  | `mqsh-extended`                                   | status payload format: `mqsh-extended`, `mqsh-basic` or `plain` ([Payloads](#payloads))                                     |
+| `--plain-tree <level>`                                                                                                                       | —                                                 | additionally publish plain payloads under `<name>/<level>/…` (the second `ccu-mqtt` node of the Node-RED flow)              |
+| `--publish-cache`                                                                                                                            | off                                               | publish every datapoint value known to the ReGa at start (thousands of retained messages)                                   |
+| `--publish-counters`, `--duty-cycle-interval`                                                                                                | on, 90                                            | rpc rx/tx counters and `listBidcosInterfaces` duty cycle polling (0 = off)                                                  |
+| `--rpc-topics`                                                                                                                               | off                                               | arbitrary rpc calls via MQTT — an unrestricted API surface, only on a trusted broker                                        |
+| `--ignore`                                                                                                                                   | —                                                 | comma separated globs on `<interface>.<channel>.<datapoint>` not to publish, e.g. `*.*.RSSI_*,HmIP-RF.*.*_STATUS`           |
+| `--ha-generic` / `--no-ha-generic`                                                                                                           | on                                                | announce datapoints without a role as (disabled) generic entities ([Home Assistant](#home-assistant))                       |
+| `--ha-area` / `--no-ha-area`                                                                                                                 | on                                                | suggest the channels' room as the device's area in Home Assistant (`suggested_area`, [Home Assistant](#home-assistant))     |
+| `--state-dir`                                                                                                                                | `$STATE_DIRECTORY` or `~/.hm2mqtt`                | devices, paramset descriptions, names and last values                                                                       |
+| `-u, --mqtt-url`, `--mqtt-username`, `--mqtt-password`, `--mqtt-tls-ca`, `-n, --name`, `--json-payloads`, `--maintenance`, `-v, --verbosity` | core                                              | shared options of every adapter; `--name` (default `hm`) is the topic prefix                                                |
 
 ## Topics
 
@@ -264,66 +270,105 @@ the plain format (the second `ccu-mqtt` node of a flow).
 Names come from the ReGa (devices, channels, rooms, functions), are cached in the state
 directory and re-read with `<name>/set/rega/sync`. A `--name-file` overrides single addresses.
 Without the ReGa (`--no-rega`) topics use addresses. Events of channels without a name use the
-address as well. On a box without ReGaHSS they come from the metadata API instead — see
-[openccu-lite](#openccu-lite).
+address as well. On openccu-lite, which has no ReGaHSS, they come from its metadata API instead -
+see [openccu-lite](#openccu-lite).
 
 ## openccu-lite
 
 [openccu-lite](https://github.com/hobbyquaker/openccu-lite) is a CCU firmware without ReGaHSS.
-hm2mqtt works there without a changed configuration: at start (and again on reconnect) it asks
-`GET http://<ccu-address>/api/meta/v1/version`, and when that answers it takes device and channel
-names, rooms and functions from the box's **metadata API** instead of from the ReGa. A CCU3,
-RaspberryMatic or OpenCCU answers 404 there and everything stays exactly as before — the same
-configuration works on both, which is what a backup restored on the other kind of box needs.
+hm2mqtt finds out by itself what `--ccu-address` is: it asks `GET http://<ccu-address>/api/meta/v1/version`
+once at start. openccu-lite answers it, a CCU3, RaspberryMatic or OpenCCU does not, and the same
+configuration works on both - which is what a backup restored on the other kind of system needs.
+`--backend ccu` or `--backend openccu-lite` skips the question. An address that does not answer at
+all is never taken for a CCU for good: hm2mqtt starts with the CCU connection and asks again every
+minute; when openccu-lite answers there later, it restarts itself (the service manager - systemd,
+docker's restart policy, the addon's supervision - starts it again) and connects through its API.
 
-**Install and start.** On the system itself hm2mqtt is installed from the addon catalogue
-(_Addons → Catalogue_, the same package as on a CCU; its manifest `openccu-lite.json` ships in the
-package). The addon declares the early start: its unit starts at boot before `rfd` and `hmipserver`,
-and hm2mqtt waits for them quietly — an interface that does not answer yet is probed and subscribed
+### On the system itself (addon)
+
+Installed from the addon catalogue (_Addons → Catalogue_, the same package as on a CCU; its manifest
+`openccu-lite.json` ships in the package), hm2mqtt configures itself: the broker URL is the one
+setting to make, as on a CCU. It talks to the interface processes over the loopback as on a CCU and
+takes device and channel names, rooms and functions from the system's metadata API with the
+system's own read-only token (`/usr/local/etc/occulite/local-token`) - nothing to pair, nothing to
+configure.
+
+The addon declares the early start: its unit starts at boot before `rfd` and `hmipserver`, and
+hm2mqtt waits for them quietly - an interface that does not answer yet is probed and subscribed
 again after 1, 2, 4 and 8 s, then every 15 s, with one info line and no warning, and one that comes
 up later (or after a restart of its process) is picked up without a restart of hm2mqtt. The system
-can switch the early start off on its Addons page; the unit then starts after both. The broker URL
-is the one setting to make, as on a CCU. The log is in the journal and nowhere else — no
-`var/hm2mqtt.log` on the SD card: `journalctl -u addon-hm2mqtt`, the system's _Log_ page
-(`/system/log?unit=addon-hm2mqtt`), and the settings page's log view, which reads it with the
-addon's own API token (the manifest asks for `logs:read`). The system opens the settings page
-without `?sid=`: the page and its CGIs take the session from the system's `X-Occulite-Session`
-header and confirm it with the system (the manifest declares `ui.session_header`); `?sid=` keeps
-working for a CCU and for an openccu-lite image from before the header.
+can switch the early start off on its Addons page; the unit then starts after both. The log is in
+the journal and nowhere else - no `var/hm2mqtt.log` on the SD card: `journalctl -u addon-hm2mqtt`,
+the system's _Log_ page (`/system/log?unit=addon-hm2mqtt`), and the settings page's log view, which
+reads it with the addon's own API token (the manifest asks for `logs:read`). The system opens the
+settings page without `?sid=`: the page and its CGIs take the session from the system's
+`X-Occulite-Session` header and confirm it with the system (the manifest declares
+`ui.session_header`); `?sid=` keeps working for a CCU and for an openccu-lite image from before the
+header.
 
-Names arrive as a snapshot at start and then over the box's event stream (`/api/meta/v1/events/sse`):
-a rename in the box's UI is in the topics about a second later, without a poll and without a
-restart. The store is cached in `meta.json` in the state directory, so a start without the box
-still has the names. `<name>/set/rega/sync` re-reads the snapshot here too.
+### On another host (npm, docker)
 
-**The credential.** Everything but the version call needs one:
+Elsewhere hm2mqtt connects through the system's API with
+[occulite-client](https://github.com/hobbyquaker/occulite-client): **no callback server, no ports to
+open or publish, no `init`** - the events arrive as a stream hm2mqtt opens. It needs a credential,
+which it gets by **pairing** once:
 
-| where hm2mqtt runs | credential                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------- |
-| on the box (addon) | the box's own read-only token, read from `/usr/local/etc/occulite/local-token` — nothing to configure |
-| anywhere else      | `--meta-token` (`HM2MQTT_META_TOKEN`): an API token (`olt_…`) created on the box under _Benutzer_     |
+```
+hm2mqtt --pair https://192.168.1.20 --state-dir /var/lib/hm2mqtt/hm
+```
 
-Without a valid credential hm2mqtt logs one line and runs on addresses; it picks the names up as
-soon as a token works, without a restart. `--meta-url` overrides the base url when the box is
-behind a proxy or on another port. Note that openccu-lite's interface processes listen on loopback
-only, so hm2mqtt normally runs **on** the box (addon package) or goes through its XML-RPC proxy.
+logs a code (_Pairing code 482 719 - approve hm2mqtt.js on 192.168.1.20 on the system's Status
+page_) and waits up to five minutes. An administrator approves the request with that code on the
+system's _Status_ page; hm2mqtt stores the token and the fingerprint of the system's certificate in
+`occulite.json` in the state directory (mode `0600`) and exits. The service started afterwards finds
+it and pins the certificate. In docker, `--pair-on-start` (`HM2MQTT_PAIR_ON_START=true`) does the
+same at the first start, when no credential is stored yet:
 
-**What has no replacement** on such a box (from openccu-lite's `docs/porting-from-rega.md`):
+```
+docker run -d --name hm2mqtt --restart unless-stopped -v hm2mqtt:/data \
+  -e HM2MQTT_CCU_ADDRESS=192.168.1.20 -e HM2MQTT_MQTT_URL=mqtt://broker \
+  -e HM2MQTT_PAIR_ON_START=true ghcr.io/hobbyquaker/hm2mqtt.js
+docker logs -f hm2mqtt          # the pairing code
+```
+
+The pairing asks for the devices at the level _operate_ (values and writes) and for the names;
+with `--rpc-topics` it asks for _administer_, because the system allows an arbitrary method only
+then - on openccu-lite the `rpc/#` topics are limited by what the administrator approved. An API
+token created on the system (`--meta-token`, `HM2MQTT_META_TOKEN`) works instead of pairing.
+Without either, hm2mqtt says how to pair and exits. A token that is revoked is logged as an error
+and asked again with the backoff, so a new pairing is picked up without a restart.
+
+What is different from a CCU connection:
+
+- **Values at connect:** every value the system has is a retained topic before the first event,
+  with the system's `ts` and `lc`; the values the system does not keep itself are read once, paced
+  (BidCos devices are asked once, never polled). A value the system restored after its own restart
+  that no device has reported since carries `"uncertain": true` in the `hm` block.
+- **Interfaces** are the ones the system runs (`--interfaces` narrows them); one that comes up
+  later - hmipserver after rfd - is used without a restart. `--listen-address`, `--init-address`
+  and the callback ports are not used.
+- **Writes** (`set`, `paramset`, `rpc`) go over the system's API; `<name>/connected` and the
+  `interface/<interface>/connected` topics follow the stream and the system's interface state.
+
+### Names, and what has no replacement
+
+Names arrive as a snapshot at start and then over the system's change stream: a rename in the
+system's UI is in the topics about a second later, without a poll and without a restart. The
+store is cached in `meta.json` in the state directory, so a start without the system still has the
+names. Rooms and functions are trees there - a channel in `room/eg/wohnzimmer` is reported as
+`Wohnzimmer`, the parent nodes are not added, so `hm.rooms` looks exactly as it did on a CCU.
 
 - **System variables** and **programs**: there is no ReGa DOM. Users who need them run automation
   in Node-RED (RedMatic), Home Assistant, or whatever the addon is bridging to.
-- **`exec()`** of HM-Script, `dom.GetObject`, `system.GetSessionVarStr` from your own code: gone.
-- **ReGa ids** (`dom.GetObject(1234)`): there are none. Refs (`<interface>.<address>`) are the identity.
-- **Service messages / alarms** (variables 40 and 41): interface-level state only.
-- **The CCU WebUI's JSON-RPC API** (`/api/homematic.cgi`, `Session.login`, `Device.listAll`,
-  `Interface.*`): not present.
+- **`exec()`** of HM-Script, `dom.GetObject`, ReGa ids: gone. Refs (`<interface>.<address>`) are the
+  identity.
+- **The CCU WebUI's JSON-RPC API** (`/api/homematic.cgi`): not present.
 
 In hm2mqtt that means: no `status/<variable>` and `status/<program>` topics and no writes to them,
 and no `--publish-cache` (the value cache was ReGa's `getValues`). `--rega-poll-interval`,
 `--rega-poll-trigger` and the `--topic-sysvar-*`/`--topic-program-*` templates stay accepted so one
-configuration serves both kinds of box; on openccu-lite they do nothing and one log line at start
-says so. Rooms and functions are trees there — a channel in `room/eg/wohnzimmer` is reported as
-`Wohnzimmer`, the parent nodes are not added, so `hm.rooms` looks exactly as it did on a CCU.
+configuration serves both kinds of system; on openccu-lite they do nothing and one log line at
+start says so.
 
 ## Home Assistant
 

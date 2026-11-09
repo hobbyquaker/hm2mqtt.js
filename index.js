@@ -21,6 +21,7 @@ import {
     watchInterfaces,
     interfaceConfig,
     detectLocal,
+    isLocalHost,
     regaPort,
     INTERFACE_NAMES,
 } from './lib/interfaces.js';
@@ -28,7 +29,18 @@ import {RpcServers, RpcConnection} from './lib/rpc.js';
 import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
-import {MetaSync, detectMeta} from './lib/meta.js';
+import {
+    LiteHub,
+    LiteNames,
+    chooseBackend,
+    pairAndStore,
+    remoteAuth,
+    remoteSetup,
+    remoteTrust,
+    systemAuth,
+    watchForLite,
+} from './lib/lite.js';
+import {probe} from 'occulite-client/node';
 import {castValue, isWriteable} from './lib/cast.js';
 import {
     sanitizeName,
@@ -76,7 +88,8 @@ const DEVICES_WAIT_MS = 10000;
 const STOP_TIMEOUT_MS = 1500;
 const RESOLVE_RETRY_MS = 10000;
 /** how often an unreachable box is probed for the metadata api again (H-47) */
-const REDETECT_MS = 60000;
+// HM2MQTT_REDETECT_MS: for the tests only
+const REDETECT_MS = Number(process.env.HM2MQTT_REDETECT_MS) || 60000;
 /** how long the local-mode probe waits for the interface processes on a loopback address (B-1) */
 const LOCAL_WAIT_MS = 120000;
 
@@ -221,6 +234,41 @@ const adapter = createAdapter({
 });
 const {log, pubStatus} = adapter;
 
+/*
+ * --pair: pair with an openccu-lite system and exit. The credential (token and the certificate's
+ * fingerprint) goes into the state directory, where the service started afterwards finds it.
+ */
+if (config.pair !== undefined) {
+    const target = config.pair || config.metaUrl || config.ccuAddress;
+    if (!target) {
+        log.error('--pair needs a url, e.g. --pair https://192.168.1.20');
+        process.exit(1);
+    }
+    const found = await probe(target, {timeout: 10000});
+    if (found.kind !== 'openccu-lite') {
+        log.error(
+            '--pair:',
+            target,
+            found.reachable ? 'is not an openccu-lite system' : `does not answer (${found.reason})`,
+        );
+        process.exit(1);
+    }
+    try {
+        await pairAndStore({
+            url: found.url,
+            stateDir: config.stateDir,
+            log: log,
+            appVersion: pkg.version,
+            instance: os.hostname(),
+            administer: config.rpcTopics,
+        });
+        process.exit(0);
+    } catch (err) {
+        log.error('pairing failed:', err.message);
+        process.exit(1);
+    }
+}
+
 for (const warning of config.$warnings || []) {
     log.warn(warning);
 }
@@ -236,6 +284,21 @@ for (const pattern of listenPatterns) {
     }
 }
 
+const metadata = new Metadata({stateDir: config.stateDir, seedFile: path.join(here, 'paramsets.json'), log});
+metadata.load();
+
+/*
+ * What the address is (H-46): openccu-lite answers `GET /api/meta/v1/version`, a CCU does not.
+ * On openccu-lite itself the interface processes are talked to over the loopback as on a CCU and
+ * the names come from the metadata API with the system's local token; an openccu-lite elsewhere
+ * is connected through its API (occulite-client): no callback server, no init. A configuration
+ * moved between a CCU and an openccu-lite keeps working untouched.
+ */
+const metaUrl = config.metaUrl || `${config.ccuTls ? 'https' : 'http'}://${host}`;
+const choice = await chooseBackend({backend: config.backend, url: metaUrl, loopback: isLocalHost(host)});
+/** an openccu-lite elsewhere: everything through occulite-client */
+const remote = choice.kind === 'remote';
+
 /*
  * Running on the CCU itself, the interface processes are on loopback and the familiar
  * 2000/2001/2010/9292/8181 are only lighttpd proxies in front of them: an extra hop, XML over HTTP
@@ -247,33 +310,26 @@ for (const pattern of listenPatterns) {
 // TLS and the ports the user asked for, so it is never probed into, only chosen with --local
 // on a loopback address where nothing answers yet the interface processes may still be starting
 // (a boot, openccu-lite's early start): wait for them up to two minutes before deciding (B-1)
-const localMode =
-    config.local === undefined
-        ? !config.ccuTls &&
-          (await detectLocal(host, {
-              waitMs: LOCAL_WAIT_MS,
-              onWait: () => log.info('no interface process answers on', host, 'yet - waiting for them'),
-          }))
-        : Boolean(config.local);
+const localMode = remote
+    ? false
+    : config.local === undefined
+      ? !config.ccuTls &&
+        (await detectLocal(host, {
+            waitMs: LOCAL_WAIT_MS,
+            onWait: () => log.info('no interface process answers on', host, 'yet - waiting for them'),
+        }))
+      : Boolean(config.local);
 if (localMode) {
     log.info('local mode: BidCos over binrpc (32001/32000), hmipserver on 32010, ReGa on 8183');
 }
 
-const metadata = new Metadata({stateDir: config.stateDir, seedFile: path.join(here, 'paramsets.json'), log});
-metadata.load();
-
-/*
- * Where names, rooms and functions come from (H-46): openccu-lite has no ReGaHSS, but a metadata
- * api that answers `GET /api/meta/v1/version` and nothing else does. That one call is the whole
- * detection - no new option, no hostname or port heuristics, so a configuration moved between a
- * CCU and an openccu-lite box keeps working untouched. Explicit --no-rega still means "addresses
- * only" on both.
- */
-const metaUrl = config.metaUrl || `${config.ccuTls ? 'https' : 'http'}://${host}`;
-/** true while the box has not answered the probe at all: something may still come up there */
-let redetect = false;
-let redetectTimer = null;
 let regaSync = null;
+/** probing an address that did not answer at start */
+let redetect = null;
+/** the connection to a remote openccu-lite (devices, values and names) */
+let hub = null;
+/** on openccu-lite itself: the names-only connection */
+let namesHub = null;
 
 function createRega() {
     const rega = new Rega({
@@ -288,34 +344,74 @@ function createRega() {
     return new RegaSync({rega, host, metadata, stateDir: config.stateDir, nameFile, log});
 }
 
-function createMeta() {
-    return new MetaSync({
-        url: metaUrl,
-        token: config.metaToken,
-        insecure: config.ccuInsecure,
-        fixedUrl: Boolean(config.metaUrl),
-        metadata,
+if (remote) {
+    const setup = remoteSetup({
+        metaToken: config.metaToken,
+        metaUrl: config.metaUrl,
         stateDir: config.stateDir,
-        nameFile,
+        fallbackUrl: choice.url,
+    });
+    const {url} = setup;
+    let {credential} = setup;
+    log.info('openccu-lite on', host + ': connecting through its API (' + url + ')');
+    if (!credential && config.pairOnStart) {
+        try {
+            credential = await pairAndStore({
+                url,
+                stateDir: config.stateDir,
+                log,
+                appVersion: pkg.version,
+                instance: os.hostname(),
+                administer: config.rpcTopics,
+            });
+        } catch (err) {
+            log.error('pairing failed:', err.message);
+            process.exit(1);
+        }
+    }
+    if (!credential) {
+        log.error(
+            'openccu-lite on',
+            host,
+            'needs a credential: pair once with `hm2mqtt --pair',
+            url + '` (or start with --pair-on-start), or set --meta-token',
+        );
+        process.exit(1);
+    }
+    for (const option of ['listenAddress', 'initAddress']) {
+        if (config[option]) {
+            log.info(
+                'openccu-lite sends the events over its API: --' +
+                    option.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()),
+                'is not used',
+            );
+        }
+    }
+    hub = new LiteHub({
+        url,
+        // read at every attempt: a pairing made while this runs is picked up
+        auth: remoteAuth({metaToken: config.metaToken, stateDir: config.stateDir}),
+        trust: remoteTrust({fingerprint256: credential.fingerprint256, url, insecure: config.ccuInsecure}),
         log,
     });
+} else if (choice.kind === 'on-system' && config.rega) {
+    log.info('openccu-lite: names, rooms and functions from the metadata api');
+    namesHub = new LiteHub({
+        url: metaUrl,
+        auth: systemAuth({metaToken: config.metaToken}),
+        trust: remoteTrust({url: metaUrl, insecure: config.ccuInsecure}),
+        namesOnly: true,
+        log,
+    });
+} else if (choice.redetect) {
+    log.debug('nothing answers on', metaUrl, '(' + choice.reason + ') - using the CCU connection');
 }
 
 if (config.rega) {
-    const found = await detectMeta(metaUrl, {insecure: config.ccuInsecure});
-    if (found.ok) {
-        log.info(
-            'openccu-lite on',
-            host + ':',
-            found.version.implementation || 'metadata api v' + found.version.version,
-            '- names, rooms and functions from the metadata api',
-        );
-        regaSync = createMeta();
-    } else {
-        log.debug('no metadata api on', host, '(' + found.reason + ') - using ReGa');
-        redetect = !found.reachable;
-        regaSync = createRega();
-    }
+    regaSync =
+        hub || namesHub
+            ? new LiteNames({hub: hub || namesHub, metadata, stateDir: config.stateDir, nameFile, log})
+            : createRega();
     regaSync.load();
 }
 
@@ -810,8 +906,14 @@ function onEvent(iface, event) {
 }
 
 function createConnection(iface) {
+    const conn = remote ? hub.connection(iface) : createRpcConnection(iface);
+    wireConnection(iface, conn);
+    return conn;
+}
+
+function createRpcConnection(iface) {
     const ic = interfaceConfig(iface, {tls: config.ccuTls, bidcosBinrpc: config.bidcosBinrpc, local: localMode});
-    const conn = new RpcConnection({
+    return new RpcConnection({
         name: iface,
         host: ccuIp,
         protocol: ic.protocol,
@@ -829,6 +931,10 @@ function createConnection(iface) {
         listDevices: () => metadata.listDevicesAnswer(iface),
         log,
     });
+}
+
+/** The connection's events, the same for the CCU's callbacks and openccu-lite's stream. */
+function wireConnection(iface, conn) {
     conn.on('connected', (connected) => {
         publishItem(`interface/${iface}/connected`, connected);
         updateConnected();
@@ -866,7 +972,59 @@ function createConnection(iface) {
         adapter.publishInfo();
         scheduleIndex();
     });
-    return conn;
+}
+
+/**
+ * A value openccu-lite had at connect - its state store, or occulite-client's read of a channel for
+ * what the store does not keep - published retained before the first event, `uncertain` when the
+ * system restored it after a restart and no device has reported it since.
+ * @param {string} ref `<interface>.<channel>.<DATAPOINT>`
+ * @param {{value: *, ts?: number, lc?: number, confirmed?: boolean}} v
+ */
+function publishStored(ref, v) {
+    const first = ref.indexOf('.');
+    const last = ref.lastIndexOf('.');
+    const iface = ref.slice(0, first);
+    const channel = ref.slice(first + 1, last);
+    const datapoint = ref.slice(last + 1);
+    if (!enabled.includes(iface) || datapoint.startsWith('PRESS_') || ignored(iface, channel, datapoint)) {
+        return;
+    }
+    const message = values.stored({iface, channel, datapoint, ...v});
+    const description = metadata.valueDescription(iface, channel, datapoint);
+    publishMessage(message, {retain: !isEvent(datapoint, description)});
+}
+
+/** The interfaces of a remote openccu-lite: the configured ones it runs (or all it runs, with auto). */
+function liteInterfaces(listed) {
+    const offered = hub.interfaceNames();
+    const wanted = listed || INTERFACE_NAMES;
+    const missing = (listed || []).filter((iface) => !offered.includes(iface));
+    if (missing.length > 0) {
+        log.info('openccu-lite does not run', missing.join(', '), '- left out until it does');
+    }
+    return INTERFACE_NAMES.filter((iface) => wanted.includes(iface) && offered.includes(iface));
+}
+
+/** Every value the system has, published retained. */
+function publishAllStored(entries) {
+    let count = 0;
+    for (const [ref, v] of entries) {
+        publishStored(ref, v);
+        count += 1;
+    }
+    log.info('occulite:', count, 'values from the system');
+}
+
+/** A remote openccu-lite's connection: values after a reconnect or a resync, interfaces that appear. */
+function wireHub(listed) {
+    hub.on('values', publishAllStored);
+    hub.on('stored', (ev) => publishStored(ev.ref, ev));
+    hub.on('interface', ({interface: iface, state}) => {
+        if (['added', 'up', 'restarted'].includes(state) && (listed || INTERFACE_NAMES).includes(iface)) {
+            addInterface(iface);
+        }
+    });
 }
 
 /*
@@ -874,11 +1032,11 @@ function createConnection(iface) {
  */
 
 async function startRega() {
-    if (regaSync instanceof MetaSync) {
+    if (regaSync instanceof LiteNames) {
         // one line, once: everything a ReGa box could do and this one cannot (porting invariant 4).
         // The options stay accepted so a configuration works on both kinds of box.
         log.info(
-            'occulite: no ReGaHSS on this box - system variables, programs and the value cache are',
+            'occulite: no ReGaHSS on openccu-lite - system variables, programs and the ReGa value cache are',
             'not available; --rega-poll-interval, --rega-poll-trigger, --publish-cache and the',
             'sysvar/program topics do nothing here',
         );
@@ -900,16 +1058,6 @@ async function startRega() {
     }
     if (config.regaNamesInterval > 0) {
         timers.push(setInterval(() => resyncNames(), config.regaNamesInterval * 1000));
-    }
-    if (redetect) {
-        // nothing answered the probe at start (the box was down or still booting): ReGa was the
-        // fallback, and an openccu-lite that comes up later must not need a restart of this
-        // service to be recognised
-        redetectTimer = setInterval(
-            () => redetectProvider().catch((err) => log.debug('re-detection failed:', err.message)),
-            REDETECT_MS,
-        );
-        timers.push(redetectTimer);
     }
 }
 
@@ -953,34 +1101,6 @@ function resyncNames() {
     return regaSync.syncNames().catch((err) => log.warn(regaSync.label + ' names re-sync failed:', err.message));
 }
 
-/** Probes a box that did not answer at start; switches to the metadata api when it now does. */
-async function redetectProvider() {
-    const found = await detectMeta(metaUrl, {insecure: config.ccuInsecure});
-    if (!found.reachable) {
-        return;
-    }
-    // something answers now - whatever it is, this question is settled
-    redetect = false;
-    if (redetectTimer) {
-        clearInterval(redetectTimer);
-        redetectTimer = null;
-    }
-    if (!found.ok) {
-        log.debug('no metadata api on', host, '(' + found.reason + ') - staying with ReGa');
-        return;
-    }
-    log.info('openccu-lite answered on', host + ': switching from ReGa to the metadata api');
-    const previous = regaSync;
-    previous.stopPolling();
-    previous.removeAllListeners();
-    regaSync = createMeta();
-    regaSync.load();
-    attachProvider();
-    regaOk = false;
-    await resyncNames();
-    scheduleIndex();
-}
-
 /** The ReGa's copy of every datapoint value: seeds the value store, published with --publish-cache. */
 async function loadCache() {
     const list = await regaSync.rega.getValues();
@@ -1009,6 +1129,24 @@ async function loadCache() {
 
 async function start() {
     adapter.start();
+    if (remote) {
+        await startRemote();
+        return;
+    }
+    if (choice.redetect) {
+        // nothing answered the probe at start (the address was down or still booting): an
+        // openccu-lite that comes up later is connected through its API, which needs a fresh start -
+        // the service manager (systemd, docker's restart policy, the addon's monit) starts it again
+        redetect = watchForLite({
+            url: metaUrl,
+            intervalMs: REDETECT_MS,
+            log,
+            onLite: () => {
+                log.warn('openccu-lite answers on', host, 'now - restarting to connect through its API');
+                adapter.shutdown('openccu-lite detected', 1);
+            },
+        });
+    }
     ccuIp = await resolveCcu();
     if (regaSync && regaSync.rega) {
         regaSync.rega.host = ccuIp;
@@ -1067,6 +1205,35 @@ async function start() {
     timers.push(setInterval(() => values.save(), VALUES_SAVE_MS));
 }
 
+/** A remote openccu-lite: one connection through its API, no callback servers, no port probing. */
+async function startRemote() {
+    const listed = parseInterfaces(config.interfaces);
+    const box = await hub.start();
+    enabled = liteInterfaces(listed);
+    wireHub(listed);
+    log.info('interfaces:', enabled.join(', ') || '(none)');
+    for (const iface of enabled) {
+        connections[iface] = createConnection(iface);
+        publishItem(`interface/${iface}/connected`, false);
+    }
+    publishCounters();
+    if (regaSync) {
+        await startRega();
+    }
+    rebuildIndex();
+    await Promise.all(enabled.map((iface) => connections[iface].start()));
+    // the values the system had at connect came before the interfaces were chosen
+    publishAllStored(box.values.entries());
+    updateConnected();
+    adapter.publishInfo();
+    timers.push(setInterval(publishCounters, COUNTER_INTERVAL_MS));
+    if (config.dutyCycleInterval > 0) {
+        timers.push(setInterval(() => pollDutyCycle(), config.dutyCycleInterval * 1000));
+        setTimeout(() => pollDutyCycle(), 5000);
+    }
+    timers.push(setInterval(() => values.save(), VALUES_SAVE_MS));
+}
+
 /** An interface the start probe missed answers now: subscribe to it like to the others (B-1). */
 function addInterface(iface) {
     if (enabled.includes(iface)) {
@@ -1083,8 +1250,10 @@ function addInterface(iface) {
 }
 
 async function shutdown() {
-    if (interfaceWatch) {
-        interfaceWatch.stop();
+    for (const watch of [interfaceWatch, redetect]) {
+        if (watch) {
+            watch.stop();
+        }
     }
     for (const timer of timers) {
         clearInterval(timer);
@@ -1095,6 +1264,11 @@ async function shutdown() {
     values.stop();
     if (regaSync) {
         regaSync.stopPolling();
+    }
+    for (const connection of [hub, namesHub]) {
+        if (connection) {
+            connection.stop();
+        }
     }
     // state first: the core gives onShutdown two seconds, the de-init may not answer
     values.save();

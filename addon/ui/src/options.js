@@ -61,6 +61,11 @@ export const NOT_APPLICABLE = {
     // credential is the box's local token, which hm2mqtt reads by itself. On a CCU neither exists.
     'meta-token': "read from the box's local token file; nothing to configure on the box",
     'meta-url': 'always the box this addon runs on',
+    // The addon runs on the system it bridges: what it is follows from where it runs, and pairing
+    // is for an installation elsewhere (docker, another host) - the addon configures itself.
+    backend: 'decided by the system the addon runs on',
+    pair: 'pairing is for an installation on another host; the addon needs none',
+    'pair-on-start': 'pairing is for an installation on another host; the addon needs none',
 };
 
 export const OPTIONS = {
