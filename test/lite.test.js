@@ -25,8 +25,6 @@ import {
     addressOf,
     chooseBackend,
     createLiteClient,
-    impliedScopes,
-    scopeTransport,
     isExecutable,
     isLiteSystem,
     pairAndStore,
@@ -334,50 +332,18 @@ describe('a remote system: credential, url, trust, re-detection', () => {
 });
 
 describe('the scopes of a paired token', () => {
-    test('impliedScopes: a lite-rpc tier implies the ones before it', () => {
-        assert.deepEqual(impliedScopes(['meta:read', 'rpc:operate']).sort(), ['meta:read', 'rpc:operate', 'rpc:read']);
-        assert.deepEqual(impliedScopes(['rpc:admin']).sort(), [
-            'rpc:admin',
-            'rpc:configure',
-            'rpc:operate',
-            'rpc:read',
-        ]);
-        assert.deepEqual(impliedScopes(['meta:read']), ['meta:read']);
-        assert.deepEqual(impliedScopes([]), []);
-    });
-
-    test('scopeTransport completes the auth state and passes everything else', async () => {
-        const answers = {
-            'https://x/api/auth/v1/state': {
-                status: 200,
-                headers: {},
-                body: JSON.stringify({authenticated: true, scopes: ['rpc:operate']}),
-            },
-            'https://y/api/auth/v1/state': {status: 200, headers: {}, body: '{"authenticated": true}'},
-            'https://z/api/auth/v1/state': {status: 200, headers: {}, body: 'not json'},
-            'https://w/api/auth/v1/state': {status: 401, headers: {}, body: '{"scopes": ["rpc:operate"]}'},
-            'https://x/api/meta/v1/version': {status: 200, headers: {}, body: '{"scopes": ["rpc:operate"]}'},
-        };
-        const seen = [];
-        const tx = scopeTransport({
-            request: async (method, url, headers, body, signal) => {
-                seen.push([method, url, headers, body, signal]);
-                return answers[url];
-            },
-            stream: async (url) => ({status: 200, chunks: [], url}),
-        });
-        const state = await tx.request('GET', 'https://x/api/auth/v1/state', {a: '1'}, undefined, 'sig');
-        assert.deepEqual(JSON.parse(state.body).scopes.sort(), ['rpc:operate', 'rpc:read']);
-        assert.deepEqual(seen[0], ['GET', 'https://x/api/auth/v1/state', {a: '1'}, undefined, 'sig']);
-        for (const url of [
-            'https://y/api/auth/v1/state',
-            'https://z/api/auth/v1/state',
-            'https://w/api/auth/v1/state',
-            'https://x/api/meta/v1/version',
-        ]) {
-            assert.equal(await tx.request('GET', url, {}), answers[url], url);
+    test('a token paired at operate lists rpc:operate only and runs with devices and values', async () => {
+        const fake = new FakeBox({token: 'olt_op', scopes: ['meta:read', 'rpc:operate'], meta: house()});
+        const url = await fake.start();
+        const hub = new LiteHub({url, auth: () => ({token: 'olt_op'}), log: fakeLog()});
+        try {
+            const box = await hub.start();
+            assert.deepEqual(box.scopes, ['meta:read', 'rpc:operate']);
+            assert.equal(box.mode, 'full');
+        } finally {
+            hub.stop();
+            await fake.stop();
         }
-        assert.equal((await tx.stream('https://x/s', {}, undefined)).url, 'https://x/s');
     });
 
     test('createLiteClient: a client on the node transport with the credential resolved', async () => {
@@ -683,14 +649,14 @@ describe('LiteHub against FakeBox', () => {
             assert.equal(values, 0);
             assert.ok(log.lines.info.some((l) => l.includes('names only')));
             await waitFor(() => fake.metaStreamsOpen > 0, 5000, 'the metadata stream');
-            const metaSeen = new Promise((resolve) => hub.once('meta', resolve));
+            const settled = new Promise((resolve) => hub.once('metaSettled', resolve));
             fake.metaEvent({
                 kind: 'object.updated',
                 revision: house().revision + 1,
                 ref: 'HmIP-RF.X:1',
                 value: {name: 'x'},
             });
-            await metaSeen;
+            assert.equal((await settled).reread, false);
         } finally {
             hub.stop();
             await fake.stop();
@@ -1036,12 +1002,13 @@ describe('LiteNames', () => {
         assert.equal(polled, 3);
         await names.poll();
 
-        // a change arrives: derived again after the copy settled
+        // a change arrives: derived again once the copy is in step; settled without a change: no announcement
         box.meta.doc.objects['HmIP-RF.000A1B2C3D4E5F:4'].name = 'Stehlampe';
-        hub.emit('meta', {kind: 'object.updated'});
-        hub.emit('meta', {kind: 'object.updated'});
-        await waitFor(() => announced === 3, 3000, 'names');
+        hub.emit('metaSettled', {revision: 2, reread: true});
+        assert.equal(announced, 3);
         assert.equal(names.channelName('000A1B2C3D4E5F:4'), 'Stehlampe');
+        hub.emit('metaSettled', {revision: 2, reread: false});
+        assert.equal(announced, 3);
 
         // the connection goes and comes back
         hub.emit('status', 'connecting');
@@ -1055,9 +1022,12 @@ describe('LiteNames', () => {
 
         // stopped: no more refreshes, and detached from the hub
         names.stopPolling();
-        hub.emit('meta', {});
+        box.meta.doc.objects['HmIP-RF.000A1B2C3D4E5F:4'].name = 'Leselampe';
+        hub.emit('metaSettled', {revision: 3, reread: false});
+        assert.equal(announced, 3);
+        assert.equal(names.channelName('000A1B2C3D4E5F:4'), 'Stehlampe');
         names.removeAllListeners();
-        assert.equal(hub.listenerCount('ready') + hub.listenerCount('status') + hub.listenerCount('meta'), 0);
+        assert.equal(hub.listenerCount('ready') + hub.listenerCount('status') + hub.listenerCount('metaSettled'), 0);
         await names.startPolling();
     });
 
