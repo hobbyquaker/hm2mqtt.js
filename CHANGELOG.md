@@ -1,5 +1,33 @@
 # Changelog
 
+## 3.10.0
+
+### Added
+
+- **openccu-lite on another host, without callbacks.** hm2mqtt connects to an openccu-lite elsewhere through the
+  system's API ([occulite-client](https://github.com/hobbyquaker/occulite-client)): no callback server, no ports to
+  open or publish, no `init` - the events arrive as a stream hm2mqtt opens, writes, `paramset` and the `rpc` topics go
+  over the system's API. Every value the system has is a retained topic at connect, with the system's `ts` and `lc`;
+  what the system does not keep itself is read once, paced. A value the system restored after its own restart that no
+  device has reported since carries `"uncertain": true` in the `hm` block. Interfaces that come up later (hmipserver
+  after rfd) are used without a restart.
+- **Pairing instead of a token.** `hm2mqtt --pair <url>` shows a code, an administrator approves it on the system's
+  Status page, and hm2mqtt stores the token and the fingerprint of the system's certificate in `occulite.json` in the
+  state directory (mode `0600`); the certificate is pinned from then on. `--pair-on-start` does the same at the first
+  start (docker). An API token (`--meta-token`, now also `--token`) works instead.
+- **`--backend auto|ccu|openccu-lite`**: what `--ccu-address` is. `auto` (the default) asks the address once; an
+  address that does not answer at all is never taken for a CCU for good - when openccu-lite answers there later,
+  hm2mqtt restarts itself and connects through its API.
+
+### Changed
+
+- **On openccu-lite itself** (the addon) nothing changes for the user: the interface processes over the loopback as
+  before, names, rooms and functions from the system's metadata API with its local token - now through
+  occulite-client instead of a client of hm2mqtt's own. openccu-lite is recognised there without asking the network
+  (`/VERSION`, as the addon's service script does), so an early start no longer depends on the system's web server.
+- On openccu-lite the `rpc/#` topics are limited by the access the administrator approved; `--rpc-topics` makes the
+  pairing ask for it.
+
 ## 3.9.1
 
 ### Fixed
