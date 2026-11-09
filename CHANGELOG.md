@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.10.1
+
+### Changed
+
+- **occulite-client 0.4.0.** It knows openccu-lite's scope tiers itself now - a token paired at _operate_ lists
+  `rpc:operate` alone and still reads the devices and values - so hm2mqtt's own transport wrapper that completed the
+  token's scopes is gone. The names, rooms and functions are derived again when the client says its copy of the
+  metadata is in step with the system (its `metaSettled` event) instead of 50 ms and 1.5 s after a change: a renamed
+  room, a new or deleted node or an import shows in the topics as soon as the system's snapshot is read again, however
+  long that takes.
+
 ## 3.10.0
 
 ### Added
