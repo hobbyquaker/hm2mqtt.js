@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.10.2
+
+### Fixed
+
+- **Home Assistant: a closed cover was shown as open, with its position at 0 %.** The cover's state topic was the
+  blind's `ACTIVITY_STATE` / `DIRECTION`, which only says _opening_, _closing_ or _stopped_; on _stopped_ Home
+  Assistant decides between open and closed from the position it has at that moment and does not look again when the
+  position changes. hm2mqtt publishes the final `LEVEL` about 300 ms after the _stopped_ (it waits for the actuator
+  to settle), so Home Assistant judged by the position before the run: closed blinds stayed "open", and a blind
+  opened from 0 % stayed "closed". The state now comes from the `LEVEL` message alone - its `hm` block says whether
+  and in which direction the cover is moving, its value whether it is closed - so every message is a whole state and
+  the order of messages no longer matters. With `--payload mqsh-basic` or `plain` (no `hm` block) the cover has no
+  state topic and Home Assistant takes open/closed from the position; _opening_/_closing_ are not shown there. Home
+  Assistant picks the change up from the discovery by itself (#35, @sgybas).
+
 ## 3.10.1
 
 ### Changed
