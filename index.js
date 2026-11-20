@@ -195,6 +195,7 @@ const adapter = createAdapter({
             adapterName: pkg.name,
             name: config.name,
             jsonPayloads: config.jsonPayloads,
+            hmPayload: withHm,
             generic: config.haGeneric,
             area: config.haArea,
             devices: metadata.devices,

@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {
+    COVER_STATE_TEMPLATE,
     DEVICE_CLASSES,
     NOT_ANNOUNCED,
     discoveryModel,
@@ -189,19 +190,57 @@ describe('discoveryModel', () => {
         assert.equal(combined.components['2_LEVEL'].en, false); // VIRTUAL_DIMMER
     });
 
-    test('covers: HM blind with direction, HmIP blind with tilt', () => {
+    test('covers: HM blind, HmIP blind with tilt; the state comes from the LEVEL message (#35)', () => {
         const hm = byModel(blocks, 'HM-LC-Bl1-FM').components['1_LEVEL'];
         assert.equal(hm.p, 'cover');
         assert.equal(hm.dev_cla, 'blind');
         assert.equal(hm.pl_stop, 'STOP');
-        assert.match(hm.stat_t, /:1\/DIRECTION$/);
         assert.match(hm.set_pos_tpl, /position \/ 100/);
         assert.equal(hm.tilt_cmd_t, undefined);
         const ip = byModel(blocks, 'HmIP-FBL').components['4_LEVEL'];
         assert.match(ip.pos_t, /:3\/LEVEL$/);
-        assert.match(ip.stat_t, /:3\/ACTIVITY_STATE$/);
         assert.match(ip.tilt_cmd_t, /:4\/LEVEL_2$/);
         assert.match(ip.tilt_status_t, /:3\/LEVEL_2$/);
+        // One topic carries position and state, so no order of messages can leave a closed cover
+        // 'open': never a state topic that only says moving/stopped (Home Assistant would take
+        // open/closed from the position it happens to have when 'stopped' arrives).
+        for (const [cover, level] of [
+            [hm, /:1\/LEVEL$/],
+            [ip, /:3\/LEVEL$/],
+        ]) {
+            assert.match(cover.stat_t, level);
+            assert.equal(cover.stat_t, cover.pos_t);
+            assert.equal(cover.val_tpl, COVER_STATE_TEMPLATE);
+            assert.equal(cover.stat_stopped, undefined);
+            assert.deepEqual(
+                [cover.stat_open, cover.stat_clsd, cover.stat_opening, cover.stat_closing],
+                ['open', 'closed', 'opening', 'closing'],
+            );
+        }
+        for (const word of ['hm.working', 'hm.direction', "'opening'", "'closing'", "'closed'", "'open'"]) {
+            assert.ok(COVER_STATE_TEMPLATE.includes(word), word);
+        }
+        assert.doesNotMatch(COVER_STATE_TEMPLATE, /stopped/);
+        // a message without the keys (a value read at the start) must not make the template warn
+        assert.match(COVER_STATE_TEMPLATE, /hm\.working \| default\(false\)/);
+        assert.match(COVER_STATE_TEMPLATE, /hm\.direction \| default\(0\)/);
+        assert.match(COVER_STATE_TEMPLATE, /value_json\.hm \| default\(\{\}\)/);
+    });
+
+    test('covers without the hm block (mqsh-basic, plain): no state topic, the position says open/closed (#35)', () => {
+        for (const extra of [{hmPayload: false}, {jsonPayloads: false}, {jsonPayloads: false, hmPayload: true}]) {
+            const other = discoveryModel(ctx(extra));
+            for (const cover of [
+                byModel(other, 'HM-LC-Bl1-FM').components['1_LEVEL'],
+                byModel(other, 'HmIP-FBL').components['4_LEVEL'],
+            ]) {
+                assert.equal('stat_t' in cover, false);
+                assert.equal('val_tpl' in cover, false);
+                assert.equal(cover.stat_stopped, undefined);
+                assert.match(cover.pos_t, /\/LEVEL$/);
+                assert.match(cover.cmd_t, /\/LEVEL$/);
+            }
+        }
     });
 
     test('climate: HmIP thermostat and HM radiator thermostat', () => {

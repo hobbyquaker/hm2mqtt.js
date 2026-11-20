@@ -397,7 +397,7 @@ CCU knows works: the `CONTROL` hint of a channel's primary datapoint decides the
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | switch (HM `SWITCH`, HmIP `*_VIRTUAL_RECEIVER`)        | `switch`; HmIP: state from the `SWITCH_TRANSMITTER` channel, first receiver enabled, receivers 2/3 disabled by default                        |
 | dimmer                                                 | `light` with brightness (`LEVEL` 0..1 ↔ 0..100 %)                                                                                             |
-| blind / shutter                                        | `cover` with position, `STOP`, tilt (`LEVEL_2`) when present, opening/closing from `DIRECTION`/`ACTIVITY_STATE`                               |
+| blind / shutter                                        | `cover` with position, `STOP`, tilt (`LEVEL_2`) when present; open/closed/opening/closing from the `LEVEL` message (`mqsh-extended`)          |
 | thermostat (HM and HmIP)                               | `climate`: setpoint, current temperature/humidity, modes `auto`/`heat`, preset `boost` (HM also `comfort`/`eco`), action                      |
 | contact, rotary handle, motion, presence, smoke, water | `binary_sensor` with device class (rotary handle also a `closed/tilted/open` sensor)                                                          |
 | key                                                    | `event` per key channel with `press_short`, `press_long`, … (from the aggregate `<channel>/PRESS` item)                                       |
