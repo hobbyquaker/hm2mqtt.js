@@ -285,7 +285,8 @@ see [openccu-lite](#openccu-lite).
 hm2mqtt finds out by itself what `--ccu-address` is: it asks `GET http://<ccu-address>/api/meta/v1/version`
 once at start. openccu-lite answers it, a CCU3, RaspberryMatic or OpenCCU does not, and the same
 configuration works on both - which is what a backup restored on the other kind of system needs.
-`--backend ccu` or `--backend openccu-lite` skips the question. An address that does not answer at
+`--backend ccu` or `--backend openccu-lite` skips the question. On openccu-lite itself (a loopback address) hm2mqtt
+knows without asking, and `--backend ccu` changes nothing there: there is no ReGaHSS to poll. An address that does not answer at
 all is never taken for a CCU for good: hm2mqtt starts with the CCU connection and asks again every
 minute; when openccu-lite answers there later, it restarts itself (the service manager - systemd,
 docker's restart policy, the addon's supervision - starts it again) and connects through its API.

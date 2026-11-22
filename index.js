@@ -329,7 +329,11 @@ const localMode = remote
         }))
       : Boolean(config.local);
 if (localMode) {
-    log.info('local mode: BidCos over binrpc (32001/32000), hmipserver on 32010, ReGa on 8183');
+    // openccu-lite has no ReGaHSS: its 8183 is occulited's (B-9)
+    log.info(
+        'local mode: BidCos over binrpc (32001/32000), hmipserver on 32010' +
+            (choice.kind === 'on-system' ? '' : ', ReGa on 8183'),
+    );
 }
 
 let regaSync = null;

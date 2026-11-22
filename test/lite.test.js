@@ -378,6 +378,29 @@ describe('chooseBackend', () => {
         );
     });
 
+    test('on openccu-lite itself a ccu backend is the system itself too: no ReGa on 8183 (B-9)', async () => {
+        assert.deepEqual(
+            await chooseBackend({
+                backend: 'ccu',
+                url: 'http://127.0.0.1',
+                loopback: true,
+                isLite: () => true,
+                probe: () => assert.fail('asked'),
+            }),
+            {kind: 'on-system'},
+        );
+        assert.deepEqual(
+            await chooseBackend({
+                backend: 'ccu',
+                url: 'http://127.0.0.1',
+                loopback: true,
+                isLite: () => false,
+                probe: () => assert.fail('asked'),
+            }),
+            {kind: 'ccu'},
+        );
+    });
+
     test('on openccu-lite itself nothing is asked', async () => {
         const r = await chooseBackend({
             url: 'http://127.0.0.1',

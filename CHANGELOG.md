@@ -17,6 +17,10 @@
   address where something else answers in its place, logged `rega poll failed: …` at every poll. Now the first
   failure is a warning, a summary follows every ten minutes while it lasts, and one line says when the poll works
   again.
+- **On openccu-lite itself `--backend ccu` no longer polls a ReGa that is not there.** openccu-lite has no ReGaHSS,
+  and the port a CCU's ReGa uses belongs to the system's own service there. The automatic detection already took
+  the names from the system's metadata API; an explicit `--backend ccu` on the system itself now does the same, and
+  the start line of the local mode no longer names a ReGa port on openccu-lite.
 - **openccu-lite's early start: HmIP-RF data came several seconds later than with the ordered start.** An interface
   that did not answer at the start was probed on the retry schedule of a failed subscription (1, 2, 4, 8 s, then every
   15 s), so hmipserver, which comes up about half a minute after hm2mqtt, was found up to 15 s late. A missing
