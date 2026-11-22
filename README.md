@@ -413,6 +413,9 @@ let hm2mqtt announce it again). `--no-ha-area` leaves the suggestion out.
   usually restores their entity IDs and areas, but settings of the devices themselves do not carry over, and
   automations that target a device by its device ID have to be adjusted.
 
+Home Assistant names an entity on a child device after the child alone: the switch of the child device `Flur` of
+the device `Schalter` shows as `Flur` (the device page shows both). Its entity ID stays what it was.
+
 A channel here is a function: the channel of an HmIP switch, dimmer or blind actuator counts together with its three
 virtual channels, a key or an input counts as one. The maintenance channel (reachability, battery, signal) stays on
 the device, and a device with a single function (a plug, a contact) is not split. The main entity of a channel takes

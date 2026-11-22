@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {devicePayload} from 'mqtt-interfaces-core';
+import {VALUE_TEMPLATE} from 'mqtt-interfaces-core/hadiscovery';
 import {allKnown, ctxFor, fixture, VARIANTS, SNAPSHOT_ROOMS} from './helpers/hafixtures.js';
 import {discoveryBlocks, discoveryModel, normalizeOverrides, placement} from '../lib/hadiscovery.js';
 import {HaRecord, recordedDiscovery} from '../lib/harecord.js';
@@ -85,7 +86,12 @@ test('off (the default): the payloads of before, byte for byte, for every known 
             assert.deepEqual(r.clear, []);
             out[name] = r.blocks.map(payloadOf);
         }
-        const hash = crypto.createHash('sha256').update(JSON.stringify(out)).digest('hex');
+        // mqtt-interfaces-core 0.17.1 changed its default state template (a JSON boolean renders as
+        // true/false); with the template of before put back the payloads are 3.10.3's exactly
+        const json = JSON.stringify(out)
+            .split(JSON.stringify(VALUE_TEMPLATE))
+            .join(JSON.stringify('{{ value_json.val }}'));
+        const hash = crypto.createHash('sha256').update(json).digest('hex');
         assert.equal(hash, BEFORE, `model ${model}: the payloads changed`);
     }
 });
@@ -129,6 +135,31 @@ test('children: the function channels as child devices, keys and unique_ids unch
     );
     // the core 0.17 leaves `children` out - hm2mqtt does not hand it children then (below)
     assert.equal(payloadOf(b).payload.cdevs, undefined);
+});
+
+test('children through the real core: `cdevs` after `cmps`, every component once, the probe sees the support', () => {
+    const [b] = devicesOf(discoveryModel(ctxFor(drsi4(), {channelDevices: 'children'})));
+    const {topic, payload} = devicePayload({
+        pkg,
+        name: 'hm',
+        prefix: 'homeassistant',
+        id: b.id,
+        device: b.device,
+        components: b.components,
+        children: b.children,
+        availability: b.availability,
+        availabilityMode: b.availabilityMode,
+    });
+    assert.equal(topic, `homeassistant/device/${ID('DRS0001')}/config`);
+    assert.deepEqual(Object.keys(payload).slice(-2), ['cmps', 'cdevs']);
+    assert.deepEqual(payload, withChildren(b).payload, 'the contract the tests above assume');
+    const keys = [...Object.keys(payload.cmps), ...payload.cdevs.flatMap((c) => Object.keys(c.cmps))];
+    assert.equal(new Set(keys).size, keys.length);
+    // the start-up probe of index.js
+    const probe = devicePayload({pkg, name: 'probe', components: {}, children: [{id: 'c', name: 'c', components: {}}]});
+    assert.ok(probe.payload.cdevs);
+    // no children: no key, as before
+    assert.equal('cdevs' in devicePayload({pkg, name: 'hm', id: b.id, components: {}, children: []}).payload, false);
 });
 
 test('children without child device support in the core: everything stays on the device', () => {
