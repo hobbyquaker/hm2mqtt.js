@@ -223,4 +223,36 @@ describe('RegaSync', () => {
         sync.stopPolling();
         assert.equal(timers.length, 1);
     });
+
+    test('B-7: a poll that keeps failing is one warning, a summary every 10 min, one line when it works', async () => {
+        const lines = [];
+        const at =
+            (level) =>
+            (...args) =>
+                lines.push([level, args.join(' ')]);
+        const log = {debug: at('debug'), info: at('info'), warn: at('warn'), error: at('error')};
+        let now = 0;
+        const {sync, rega} = setup({log, now: () => now});
+        const getVariables = rega.getVariables;
+        rega.getVariables = async () => {
+            throw new Error('xml in rega response missing');
+        };
+        const timers = [];
+        sync.on('error', () => {});
+        await sync.startPolling(30, {setTimer: (fn, ms) => timers.push({fn, ms}), clearTimer: () => {}});
+        // an hour of failing polls every 30 s
+        for (let i = 0; i < 120; i += 1) {
+            now += 30000;
+            await timers.shift().fn();
+        }
+        const visible = lines.filter(([level]) => level !== 'debug');
+        assert.equal(visible.length, 1 + 6, 'the first failure and one summary per 10 min');
+        assert.match(visible[0][1], /^rega poll failed: xml in rega response missing - polling on every 30 s$/);
+        assert.match(visible[1][1], /^rega still failing: poll failed: .* - \d+ attempts since \d\d:\d\d$/);
+        assert.ok(visible.every(([level]) => level === 'warn'));
+        rega.getVariables = getVariables;
+        await timers.shift().fn();
+        assert.match(lines.at(-1)[1], /^rega poll working again after 121 failed attempts since/);
+        sync.stopPolling();
+    });
 });

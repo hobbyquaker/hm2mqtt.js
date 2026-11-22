@@ -13,6 +13,10 @@
 - **A reboot no longer logs `mqtt read ECONNRESET` as an error.** At a reboot a broker on the same system (the
   Mosquitto addon) often stops before hm2mqtt; a connection the broker closes while hm2mqtt shuts down is expected
   and is logged at debug level, and hm2mqtt no longer tries to reconnect then.
+- **A ReGa poll that keeps failing is one warning, not one every 30 s.** A CCU whose ReGaHSS does not answer, or an
+  address where something else answers in its place, logged `rega poll failed: …` at every poll. Now the first
+  failure is a warning, a summary follows every ten minutes while it lasts, and one line says when the poll works
+  again.
 - **openccu-lite's early start: HmIP-RF data came several seconds later than with the ordered start.** An interface
   that did not answer at the start was probed on the retry schedule of a failed subscription (1, 2, 4, 8 s, then every
   15 s), so hmipserver, which comes up about half a minute after hm2mqtt, was found up to 15 s late. A missing
