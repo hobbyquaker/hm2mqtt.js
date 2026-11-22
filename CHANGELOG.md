@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.11.0 (unreleased)
+
+### Added
+
+- **Home Assistant: Homematic channels as Home Assistant devices.** hm2mqtt announced one Home Assistant device per
+  Homematic device, so the channels of a two-channel actuator or an HmIP-DRSI4 that serve different rooms were all in
+  one device and one area. The new option `--ha-channel-devices` makes them child devices of the device (`children`,
+  Home Assistant 2026.11 or newer; the entities keep their IDs, history and settings, and the way back works the same)
+  or devices of their own, each in its channel's room (`devices`). The default stays `off`, with the same discovery
+  configs as before. A channel is a function (an HmIP actuator channel with its virtual channels counts as one), the
+  maintenance channel stays on the device and a device with a single function is not split. Also on the addon's
+  settings page.
+- **Home Assistant: settings per device and channel** in a JSON file, `--ha-overrides` (with a schema and an
+  example): how a device's channels are split, and per channel whether it is published to Home Assistant at all and
+  where it goes. A channel that is no longer published, or moves to another device, is removed from Home Assistant -
+  before, an entity left out of a device's discovery config stayed there. hm2mqtt keeps what it published in
+  `ha-discovery.json` in the state directory, so this works across restarts too.
+
 ## 3.10.3
 
 ### Fixed
