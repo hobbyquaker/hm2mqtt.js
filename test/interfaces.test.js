@@ -183,6 +183,7 @@ describe('watchInterfaces (B-1)', () => {
         let now = 0;
         const timers = [];
         return {
+            now: () => now,
             setTimeout: (fn, ms) => {
                 const t = {fn, at: now + ms};
                 timers.push(t);
@@ -193,17 +194,23 @@ describe('watchInterfaces (B-1)', () => {
                 if (i !== -1) timers.splice(i, 1);
             },
             advance: async (ms) => {
-                now += ms;
-                for (const t of timers.filter((x) => x.at <= now)) {
-                    timers.splice(timers.indexOf(t), 1);
-                    await t.fn();
+                const target = now + ms;
+                for (;;) {
+                    const due = timers.filter((x) => x.at <= target).sort((a, b) => a.at - b.at)[0];
+                    if (!due) {
+                        break;
+                    }
+                    timers.splice(timers.indexOf(due), 1);
+                    now = due.at;
+                    await due.fn();
                 }
+                now = target;
             },
             pending: () => timers.length,
         };
     }
 
-    test('an interface missing at the start is probed on the init schedule and handed over once when it answers', async () => {
+    test('an interface missing at the start is probed every 3 s and handed over once when it answers', async () => {
         const timers = fakeTimers();
         const open = new Set();
         const probes = [];
@@ -216,25 +223,56 @@ describe('watchInterfaces (B-1)', () => {
             local: true,
             connect,
             timers,
+            now: timers.now,
             onFound: (name) => found.push(name),
         });
         assert.deepEqual(watch.missing(), ['HmIP-RF', 'VirtualDevices']);
-        await timers.advance(999);
+        await timers.advance(2999);
         assert.equal(probes.length, 0);
-        await timers.advance(1); // 1 s
+        await timers.advance(1); // 3 s
         assert.deepEqual(probes, [32010, 39292]);
-        await timers.advance(2000); // 3 s
         open.add(32010);
-        await timers.advance(4000); // 7 s: hmipserver answers
+        await timers.advance(3000); // 6 s: hmipserver answers
         assert.deepEqual(found, ['HmIP-RF']);
         assert.deepEqual(watch.missing(), ['VirtualDevices']);
         probes.length = 0;
-        await timers.advance(8000); // 15 s: only the one still missing is probed
+        await timers.advance(3000); // 9 s: only the one still missing is probed
         assert.deepEqual(probes, [39292]);
         open.add(39292);
-        await timers.advance(15000);
+        await timers.advance(3000);
         assert.deepEqual(found, ['HmIP-RF', 'VirtualDevices']);
         assert.equal(timers.pending(), 0, 'nothing left to probe');
+    });
+
+    test('B-4: hmipserver answering at 52 s is used by 54 s; after 90 s without a find the step is 15 s', async () => {
+        const timers = fakeTimers();
+        const open = new Set();
+        const at = {};
+        const cuxdProbes = [];
+        const watch = watchInterfaces('127.0.0.1', ['HmIP-RF', 'CUxD'], {
+            local: true,
+            connect: async (h, port) => {
+                if (port === 8701) {
+                    cuxdProbes.push(timers.now());
+                }
+                return open.has(port);
+            },
+            timers,
+            now: timers.now,
+            onFound: (name) => (at[name] = timers.now()),
+        });
+        await timers.advance(52000);
+        open.add(32010);
+        await timers.advance(2000);
+        assert.equal(at['HmIP-RF'], 54000, 'found at the next 3 s step');
+        await timers.advance(200000);
+        const steps = cuxdProbes.slice(1).map((t, i) => [t, t - cuxdProbes[i]]);
+        // the find at 54 s restarts the 90 s window: 3 s steps up to 144 s, 15 s ones after it
+        for (const [t, step] of steps) {
+            assert.equal(step, t <= 144000 ? 3000 : 15000, `step before ${t}`);
+        }
+        assert.ok(steps.some(([, step]) => step === 15000));
+        watch.stop();
     });
 
     test('stop() ends the probing', async () => {

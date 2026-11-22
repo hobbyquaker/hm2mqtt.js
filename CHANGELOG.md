@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.10.3
+
+### Fixed
+
+- **openccu-lite's early start: HmIP-RF data came several seconds later than with the ordered start.** An interface
+  that did not answer at the start was probed on the retry schedule of a failed subscription (1, 2, 4, 8 s, then every
+  15 s), so hmipserver, which comes up about half a minute after hm2mqtt, was found up to 15 s late. A missing
+  interface is now probed every 3 s for the first 90 s, and again for 90 s after another interface answered, then
+  every 15 s.
+
 ## 3.10.2
 
 ### Fixed

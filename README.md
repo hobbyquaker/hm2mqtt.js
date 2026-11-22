@@ -294,8 +294,9 @@ system's own read-only token (`/usr/local/etc/occulite/local-token`) - nothing t
 configure.
 
 The addon declares the early start: its unit starts at boot before `rfd` and `hmipserver`, and
-hm2mqtt waits for them quietly - an interface that does not answer yet is probed and subscribed
-again after 1, 2, 4 and 8 s, then every 15 s, with one info line and no warning, and one that comes
+hm2mqtt waits for them quietly - an interface that does not answer yet is probed every 3 s for the
+first 90 s (and again for 90 s after another one answered), then every 15 s, with one info line and
+no warning, and subscribed as soon as it answers; one that comes
 up later (or after a restart of its process) is picked up without a restart of hm2mqtt. The system
 can switch the early start off on its Addons page; the unit then starts after both. The log is in
 the journal and nowhere else - no `var/hm2mqtt.log` on the SD card: `journalctl -u addon-hm2mqtt`,
