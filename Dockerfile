@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY index.js config.js paramsets.json example-names.json names.schema.json ./
+COPY index.js config.js paramsets.json example-names.json names.schema.json example-ha-overrides.json ha-overrides.schema.json ./
 COPY lib/ ./lib/
 
 ENV NODE_ENV=production \

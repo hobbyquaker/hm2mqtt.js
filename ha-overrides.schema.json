@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hm2mqtt Home Assistant settings per device and channel",
+  "description": "Overrides --ha-channel-devices: per device address how its channels are split, per channel address whether it is published to Home Assistant and where it goes. A channel not listed follows its device, the device follows --ha-channel-devices.",
+  "type": "object",
+  "patternProperties": {
+    "^[A-Za-z0-9-]+$": {
+      "type": "object",
+      "properties": {
+        "split": {
+          "enum": ["off", "children", "devices"],
+          "description": "off: one Home Assistant device; children: the channels as child devices (Home Assistant 2026.11+); devices: the channels as devices of their own"
+        }
+      },
+      "additionalProperties": false
+    },
+    "^[A-Za-z0-9-]+:[0-9]+$": {
+      "type": "object",
+      "properties": {
+        "publish": {"type": "boolean", "description": "false: not published to Home Assistant (its MQTT topics stay)"},
+        "device": {
+          "enum": ["parent", "child", "own"],
+          "description": "on the device, a child device of it, or a device of its own"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

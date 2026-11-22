@@ -130,6 +130,16 @@ export const OPTIONS = {
         de: 'Raum der Kanäle als Bereich vorschlagen',
         en: "Suggest the channels' room as the area",
     },
+    'ha-channel-devices': {
+        group: 'ha',
+        de: 'Kanäle als Geräte (off, children: Untergeräte ab Home Assistant 2026.11, devices: eigene Geräte)',
+        en: 'Channels as devices (off, children: child devices from Home Assistant 2026.11, devices: own devices)',
+    },
+    'ha-overrides': {
+        group: 'ha',
+        de: 'JSON-Datei mit Einstellungen pro Gerät und Kanal (Pfad)',
+        en: 'JSON file with settings per device and channel (path)',
+    },
 
     // --- filter ------------------------------------------------------------------------------
     ignore: {group: 'filter', widget: 'globs', de: 'Datenpunkte ignorieren', en: 'Ignore datapoints'},

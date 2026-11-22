@@ -10,7 +10,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createAdapter, createLogger, runDiscovery, autoAddress, StatusTracker} from 'mqtt-interfaces-core';
+import {
+    createAdapter,
+    createLogger,
+    runDiscovery,
+    autoAddress,
+    StatusTracker,
+    devicePayload as coreDevicePayload,
+} from 'mqtt-interfaces-core';
 import {Rega} from 'homematic-rega';
 import mqtt from 'mqtt';
 import config from './config.js';
@@ -55,7 +62,8 @@ import {
     ItemIndex,
 } from './lib/topics.js';
 import {compileIgnore} from './lib/roles.js';
-import {discoveryModel} from './lib/hadiscovery.js';
+import {normalizeOverrides} from './lib/hadiscovery.js';
+import {HaRecord, recordedDiscovery} from './lib/harecord.js';
 import {discoveryHint} from './lib/discovery.js';
 
 /*
@@ -149,6 +157,19 @@ if (config.nameFile) {
 }
 
 /*
+ * Home Assistant: Homematic channels as devices (task 32) - the model, the per-device and
+ * per-channel overrides, and whether the core builds child devices (`cdevs`) at all
+ */
+const haOverrides = config.haOverrides
+    ? normalizeOverrides(JSON.parse(fs.readFileSync(path.resolve(config.haOverrides), 'utf8')))
+    : {};
+const coreChildDevices = Boolean(
+    coreDevicePayload({pkg, name: 'probe', components: {}, children: [{id: 'c', name: 'c', components: {}}]}).payload
+        .cdevs,
+);
+const haRecord = new HaRecord({stateDir: config.stateDir, log: {warn: (...a) => console.error(...a)}}).load();
+
+/*
  * payload format (node-red-contrib-ccu's mqsh-extended / mqsh-basic / plain)
  */
 let payloadFormat = config.payload;
@@ -193,7 +214,7 @@ const adapter = createAdapter({
     config,
     deviceLabel: 'ccu',
     discovery: () =>
-        discoveryModel({
+        haDiscovery({
             adapterName: pkg.name,
             name: config.name,
             jsonPayloads: config.jsonPayloads,
@@ -210,6 +231,9 @@ const adapter = createAdapter({
                 renderSet({...values.fields(iface, address, datapoint), ...topicFields}).name,
             ignored,
             interfaces: enabled,
+            channelDevices: config.haChannelDevices,
+            overrides: haOverrides,
+            childDevices: coreChildDevices,
         }),
     info: () => ({
         ccu: host,
@@ -242,6 +266,28 @@ const adapter = createAdapter({
     }),
 });
 const {log, pubStatus} = adapter;
+haRecord.log = log;
+
+/** the core's discovery(): the blocks, after the configs the last run published and this one does not are cleared */
+function haDiscovery(ctx) {
+    return recordedDiscovery({ctx, record: haRecord, prefix: config.haPrefix, publish: adapter.publish});
+}
+
+if (config.haDiscovery) {
+    const wantsChildren =
+        config.haChannelDevices === 'children' ||
+        Object.values(haOverrides).some(
+            (entry) =>
+                entry.split === 'children' || Object.values(entry.channels || {}).some((c) => c.device === 'child'),
+        );
+    if (wantsChildren && coreChildDevices) {
+        log.info('Homematic channels as child devices need Home Assistant 2026.11 or newer');
+    } else if (wantsChildren) {
+        log.warn(
+            'child devices are not supported by this build (mqtt-interfaces-core) - those channels stay on their device',
+        );
+    }
+}
 
 /*
  * --pair: pair with an openccu-lite system and exit. The credential (token and the certificate's

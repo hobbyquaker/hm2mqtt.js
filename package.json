@@ -15,6 +15,8 @@
     "paramsets.json",
     "example-names.json",
     "names.schema.json",
+    "example-ha-overrides.json",
+    "ha-overrides.schema.json",
     "scripts/"
   ],
   "engines": {

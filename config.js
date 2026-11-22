@@ -192,6 +192,24 @@ export const OPTIONS = {
         describe: "Home Assistant discovery: suggest the channels' room as the device's area (suggested_area)",
         default: true,
     },
+    'ha-channel-devices': {
+        type: 'string',
+        describe:
+            'Home Assistant discovery: Homematic channels as devices - off (one device per Homematic device), children (child devices, Home Assistant 2026.11+) or devices (devices of their own, each in its room)',
+        choices: ['off', 'children', 'devices'],
+        default: 'off',
+    },
+    'ha-overrides': {
+        type: 'string',
+        describe:
+            'JSON file with Home Assistant settings per device ({"<device>": {"split": "children"}}) and channel ({"<device>:<n>": {"publish": false, "device": "own"}}), see example-ha-overrides.json',
+        file: {
+            format: 'json',
+            example: 'example-ha-overrides.json',
+            schema: 'ha-overrides.schema.json',
+            describe: 'Home Assistant settings per device and channel',
+        },
+    },
     'rpc-topics': {
         type: 'boolean',
         describe: 'accept arbitrary rpc calls on <name>/rpc/<interface>/<method>/<callid> (security surface!)',

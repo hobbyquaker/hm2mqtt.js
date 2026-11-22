@@ -148,6 +148,8 @@ the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-disco
 | `--ignore`                                                                                                                                   | —                                                 | comma separated globs on `<interface>.<channel>.<datapoint>` not to publish, e.g. `*.*.RSSI_*,HmIP-RF.*.*_STATUS`           |
 | `--ha-generic` / `--no-ha-generic`                                                                                                           | on                                                | announce datapoints without a role as (disabled) generic entities ([Home Assistant](#home-assistant))                       |
 | `--ha-area` / `--no-ha-area`                                                                                                                 | on                                                | suggest the channels' room as the device's area in Home Assistant (`suggested_area`, [Home Assistant](#home-assistant))     |
+| `--ha-channel-devices`                                                                                                                       | `off`                                             | Homematic channels as Home Assistant devices: `off`, `children`, `devices` ([Home Assistant](#channels-as-devices))         |
+| `--ha-overrides`                                                                                                                             | —                                                 | JSON file with Home Assistant settings per device and channel ([example](example-ha-overrides.json))                        |
 | `--state-dir`                                                                                                                                | `$STATE_DIRECTORY` or `~/.hm2mqtt`                | devices, paramset descriptions, names and last values                                                                       |
 | `-u, --mqtt-url`, `--mqtt-username`, `--mqtt-password`, `--mqtt-tls-ca`, `-n, --name`, `--json-payloads`, `--maintenance`, `-v, --verbosity` | core                                              | shared options of every adapter; `--name` (default `hm`) is the topic prefix                                                |
 
@@ -395,6 +397,45 @@ in `room/eg/wohnzimmer` is in `Wohnzimmer`, see [openccu-lite](#openccu-lite)). 
 applies the suggestion only when it first creates the device; a room changed later on the CCU
 stays as assigned in Home Assistant (change it there, or delete the device in Home Assistant and
 let hm2mqtt announce it again). `--no-ha-area` leaves the suggestion out.
+
+### Channels as devices
+
+`--ha-channel-devices` decides how Home Assistant sees a Homematic device with several channels:
+
+- **`off`** (the default): one Home Assistant device per Homematic device, as before;
+- **`children`**: each channel becomes a child device of its device. This needs **Home Assistant 2026.11 or newer**
+  (an older one refuses the whole device configuration, its log says `not a valid option at 'cdevs'`; hm2mqtt logs a
+  reminder at start). The entities move in place - entity IDs, history and settings stay - and the way back works at
+  any time. A child device is in its device's area until you assign another one in Home Assistant, which takes no
+  suggested area for an MQTT child device;
+- **`devices`**: each channel becomes a device of its own, in its channel's room, linked to the Homematic device.
+  Switching to or from this model removes the entities and creates them again under the new device: Home Assistant
+  usually restores their entity IDs and areas, but settings of the devices themselves do not carry over, and
+  automations that target a device by its device ID have to be adjusted.
+
+A channel here is a function: the channel of an HmIP switch, dimmer or blind actuator counts together with its three
+virtual channels, a key or an input counts as one. The maintenance channel (reachability, battery, signal) stays on
+the device, and a device with a single function (a plug, a contact) is not split. The main entity of a channel takes
+its device's name, the others the name of their datapoint.
+
+`--ha-overrides <file>` sets this per device and per channel ([schema](ha-overrides.schema.json)):
+
+```json
+{
+  "0001D3C99C6AB3": {"split": "children"},
+  "0001D3C99C6AB3:13": {"publish": false},
+  "LEQ0123456:2": {"device": "own"}
+}
+```
+
+A device's `split` (`off`, `children`, `devices`) overrides `--ha-channel-devices` for it; a channel's `publish: false`
+leaves it out of Home Assistant only (unlike `--ignore`, its MQTT topics stay), and its `device` (`parent`, `child`,
+`own`) puts it on the device, into a child device or into a device of its own. A channel not listed follows its
+device, the device follows `--ha-channel-devices`. Use the address of the channel that heads a function (the HmIP
+`*_TRANSMITTER` channel). What hm2mqtt published is kept in `ha-discovery.json` in the state directory: a channel that
+is no longer published, or moves to another device, is removed from Home Assistant, also after a restart.
+
+### Entities
 
 Entities are derived from the paramset descriptions, not from a device list — every device the
 CCU knows works: the `CONTROL` hint of a channel's primary datapoint decides the role
