@@ -33,7 +33,8 @@ cd "$(dirname "$0")/.."
 
 NODE_MAJOR="${NODE_MAJOR:-24}"
 PREFIX="${PREFIX:-/usr/local/addons/hm2mqtt}"
-ALPINE_BRANCH="${ALPINE_BRANCH:-edge}"
+# a stable branch: edge moves on to the next Node major (nodejs 26 since 2026-11)
+ALPINE_BRANCH="${ALPINE_BRANCH:-v3.24}"
 ALPINE_MIRROR="${ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
 
 ARCH="${1:-}"
