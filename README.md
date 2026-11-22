@@ -151,6 +151,12 @@ the reply layout come from [hm-discover](https://github.com/hobbyquaker/hm-disco
 | `--state-dir`                                                                                                                                | `$STATE_DIRECTORY` or `~/.hm2mqtt`                | devices, paramset descriptions, names and last values                                                                       |
 | `-u, --mqtt-url`, `--mqtt-username`, `--mqtt-password`, `--mqtt-tls-ca`, `-n, --name`, `--json-payloads`, `--maintenance`, `-v, --verbosity` | core                                              | shared options of every adapter; `--name` (default `hm`) is the topic prefix                                                |
 
+A broker that cannot be reached (or refuses the credentials) is tried again after 1 s, then less often, doubling up
+to once a minute, and from 1 s again once a connection was made. The log has one warning when the connection fails,
+one more for each different error, a summary every ten minutes while it lasts (_still failing … N attempts since
+HH:MM_) and one line when it is connected again; the single attempts are at `debug`. A connection the broker closes
+while hm2mqtt itself shuts down (at a reboot, a broker on the same system often stops first) is logged at `debug` only.
+
 ## Topics
 
 `<name>` = `--name` (default `hm`). Channel and variable names are the CCU's, verbatim (spaces,

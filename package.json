@@ -70,6 +70,7 @@
     "binrpc": "^4.3.0",
     "homematic-rega": "^2.0.0",
     "homematic-xmlrpc": "^2.0.0",
+    "mqtt": "^5.5.0",
     "mqtt-interfaces-core": "^0.17.0",
     "occulite-client": "^0.4.0"
   },

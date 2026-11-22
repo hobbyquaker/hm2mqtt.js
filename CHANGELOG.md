@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **An unreachable broker filled the log with a line every few seconds** - thousands per boot, on an SD card with a
+  persistent journal. A failed connection was retried at a fixed short period and every failure was logged at error
+  level. Now the retries back off (1 s, doubling to once a minute, from 1 s again after a connection was made), the
+  first failure is one warning, each different error one more, a summary follows every ten minutes while it lasts
+  (_still failing … N attempts since HH:MM_) and one line says when the broker is connected again. The same for every
+  kind of failure: host unreachable, connection refused, timeout, unknown host name, refused credentials.
+- **A reboot no longer logs `mqtt read ECONNRESET` as an error.** At a reboot a broker on the same system (the
+  Mosquitto addon) often stops before hm2mqtt; a connection the broker closes while hm2mqtt shuts down is expected
+  and is logged at debug level, and hm2mqtt no longer tries to reconnect then.
 - **openccu-lite's early start: HmIP-RF data came several seconds later than with the ordered start.** An interface
   that did not answer at the start was probed on the retry schedule of a failed subscription (1, 2, 4, 8 s, then every
   15 s), so hmipserver, which comes up about half a minute after hm2mqtt, was found up to 15 s late. A missing

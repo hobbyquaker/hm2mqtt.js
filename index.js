@@ -12,6 +12,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createAdapter, createLogger, runDiscovery, autoAddress, StatusTracker} from 'mqtt-interfaces-core';
 import {Rega} from 'homematic-rega';
+import mqtt from 'mqtt';
 import config from './config.js';
 import pkg from './package.json' with {type: 'json'};
 import {handle as handleInstall} from './lib/install.js';
@@ -26,6 +27,7 @@ import {
     INTERFACE_NAMES,
 } from './lib/interfaces.js';
 import {RpcServers, RpcConnection} from './lib/rpc.js';
+import {backoffConnect} from './lib/broker.js';
 import {Metadata} from './lib/metadata.js';
 import {ValueStore, hmBlock, isEvent} from './lib/values.js';
 import {RegaSync} from './lib/rega.js';
@@ -232,6 +234,12 @@ const adapter = createAdapter({
     },
     onMqttConnect: () => republishTopics(),
     onShutdown: shutdown,
+    // retries with backoff and a quiet log for an unreachable broker (B-11, B-3)
+    mqttConnect: backoffConnect({
+        connect: mqtt.connect,
+        log: () => adapter.log,
+        stopping: () => adapter.shuttingDown,
+    }),
 });
 const {log, pubStatus} = adapter;
 
