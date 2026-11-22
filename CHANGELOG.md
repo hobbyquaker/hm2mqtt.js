@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.11.0 (unreleased)
+## 3.11.0
 
 ### Added
 
@@ -17,6 +17,12 @@
   where it goes. A channel that is no longer published, or moves to another device, is removed from Home Assistant -
   before, an entity left out of a device's discovery config stayed there. hm2mqtt keeps what it published in
   `ha-discovery.json` in the state directory, so this works across restarts too.
+
+### Changed
+
+- mqtt-interfaces-core 0.18.0 (child devices). Since its 0.17.1 a JSON boolean in the default state template of a
+  discovery entity renders as `true`/`false`; hm2mqtt's entities that use that template carry numbers, so nothing
+  changes in Home Assistant.
 
 ## 3.10.3
 
