@@ -26,7 +26,8 @@ test('the openccu-lite manifest names this addon and its release source', () => 
     // (task 17) and nothing else
     const {note, ...runtime} = manifest.runtime;
     assert.deepEqual(runtime, {daemon: true, needs: ['rfd', 'hmipserver'], start: 'early', api_scopes: ['logs:read']});
-    assert.ok(note.de && note.en);
+    // no note: the description says it all (the catalogue's text for users, occulited task 188)
+    assert.equal(note, undefined);
     // the settings page and every CGI read openccu-lite's session header (task 20), so the system
     // opens the page without appending ?sid=; the icon and the logo (task 26) are the SVGs in www/,
     // which the system serves from the installed tree (the path's first segment is the package
